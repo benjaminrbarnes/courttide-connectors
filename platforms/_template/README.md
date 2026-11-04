@@ -9,6 +9,7 @@ Read the [new connector guide](../../docs/NEW-CONNECTOR.md) before copying it.
 
 The template exercises `open_interval`. Its other matrix entries are marked
 **demonstration only** so this one-case example can run. Those placeholders are
-not a production conformance claim. For a real platform, remove each placeholder
-and add a fixture, or explain specifically why that case cannot occur. Run the
-complete matrix and update the new platform's README before requesting review.
+not a production conformance claim: a copied demo can pass with them unchanged.
+For a real platform, remove each placeholder and add a fixture, or explain
+specifically why that case cannot occur. Run the complete matrix and update the
+new platform's README before requesting review.

@@ -70,7 +70,9 @@ Only generic shapes and invented examples belong in this repository.
    rules, reason codes and transport profile without tenant or court details.
 5. Add an invented config under `examples/tenants/`, using the reserved keys
    and `example-` slugs, and update each fixture's `configPath` to point to it.
-   Keep all real configs outside the repository. See the [tenant guide](TENANT-CONFIG.md).
+   The synthetic `tenant` value must be exactly `example`, `exampleparks` or
+   `XX/example-city`; it is not an arbitrary `example-` slug. Keep all real
+   configs outside the repository. See the [tenant guide](TENANT-CONFIG.md).
 6. Replace the template fixture and all its demonstration-only exemptions. Each
    case directory needs `meta.json`, `responses.json`, `requests.json`,
    `gate.json` and exactly one of `expected.json` or `error.json`. Set
