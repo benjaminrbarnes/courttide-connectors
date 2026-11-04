@@ -71,8 +71,8 @@ export function configure(context: ConnectorContext): CivicRecConfig {
   for (const park of tenant.parks) {
     for (const court of park.courts) {
       const params = civicRecCourtParams.safeParse(court.params);
-      if (!params.success || all.has(court.key))
-        throw new ConnectorError("schema_changed");
+      if (!params.success) throw new ConnectorError("schema_changed");
+      if (all.has(court.key)) throw new ConnectorError("identity_mismatch");
       all.set(court.key, {
         key: court.key,
         params: params.data,
@@ -82,7 +82,7 @@ export function configure(context: ConnectorContext): CivicRecConfig {
   }
   const keys = [...all.keys()];
   if (!CourtSelectionSchema.safeParse(keys).success)
-    throw new ConnectorError("schema_changed");
+    throw new ConnectorError("identity_mismatch");
   const selected = context.courts ?? keys;
   if (
     !CourtSelectionSchema.safeParse(selected).success ||

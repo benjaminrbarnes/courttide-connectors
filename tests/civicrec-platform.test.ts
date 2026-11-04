@@ -450,6 +450,63 @@ describe("CivicRec platform", () => {
     expect(h.recording.calls).toEqual([]);
   });
 
+  it("rejects invalid configured or selected court sets before network admission", () => {
+    const zero = structuredClone(tenant);
+    zero.parks[0]!.courts = [];
+    const duplicate = structuredClone(tenant);
+    duplicate.parks[0]!.courts.push(
+      structuredClone(duplicate.parks[0]!.courts[0]!),
+    );
+    const oversized = structuredClone(tenant);
+    const example = oversized.parks[0]!.courts[0]!;
+    oversized.parks[0]!.courts = Array.from({ length: 257 }, (_, index) => ({
+      ...structuredClone(example),
+      key: `${900001 + (index % 99)}:${900001 + Math.floor(index / 99)}`,
+    }));
+    const badParams = structuredClone(tenant);
+    badParams.parks[0]!.courts[0]!.params = {};
+    const cases = [
+      { config: zero, code: "identity_mismatch" },
+      { config: duplicate, code: "identity_mismatch" },
+      { config: oversized, code: "identity_mismatch" },
+      { config: badParams, code: "schema_changed" },
+      { config: tenant, courts: [], code: "identity_mismatch" },
+      {
+        config: tenant,
+        courts: ["900003", "900003"],
+        code: "identity_mismatch",
+      },
+      { config: tenant, courts: ["900099"], code: "identity_mismatch" },
+      {
+        config: tenant,
+        courts: oversized.parks[0]!.courts.map((court) => court.key),
+        code: "identity_mismatch",
+      },
+    ];
+    for (const { config, courts, code } of cases) {
+      const fake = createFakeFetch([]);
+      const recording = createRecordingGate();
+      const runtime = createConnectorRuntime({
+        tenant: config,
+        profile: civicRecPlatform.transport,
+        leaseScope: "per_request",
+        fetch: fake.fetch,
+        gate: recording.gate,
+        now: clock,
+      });
+      expect(() =>
+        civicRecPlatform.createConnector({
+          tenant: config,
+          courts,
+          http: runtime.http,
+          now: clock,
+        }),
+      ).toThrowError(expect.objectContaining({ code }));
+      expect(fake.requests).toEqual([]);
+      expect(recording.calls).toEqual([]);
+    }
+  });
+
   it("rejects invalid bootstrap or calendar chronology in the injected client", async () => {
     const headers = new Headers({ "content-type": "text/html" });
     headers.append(
