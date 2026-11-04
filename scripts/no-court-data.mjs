@@ -479,6 +479,10 @@ export function scanPackedArchive(archive) {
       maxBuffer: 100 * 1024 * 1024,
     });
     files.set(path, bytes);
+    if (decodeText(bytes) === null) {
+      findings.push({ path, reason: "non-text archive entry" });
+      continue;
+    }
     inspectBytes(path, bytes, findings);
   }
   inspectFixtureMetadata(files, findings);

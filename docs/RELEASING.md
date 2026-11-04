@@ -5,8 +5,9 @@ Release contains the compiled npm tarball, `SHA256SUMS.txt` and `INTEGRITY.txt`
 with its npm `sha512-...` integrity string. The release workflow runs the full
 check, scans the exact tarball, then installs it in an empty Node 24 project and
 checks both platform imports and the CLI. The tagged commit must be on `main`.
-The archive check also rejects duplicate paths, unsafe paths and non-regular
-entries such as symbolic links.
+The archive check also rejects duplicate paths, unsafe paths, opaque binary
+content and non-regular entries such as symbolic links. The package contains
+compiled text, declarations and its JSON schema.
 
 Before tagging, finish review and merge the intended package, CLI and contributor
 guides. Update the package version, lockfile and versioned section in

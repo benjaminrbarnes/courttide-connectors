@@ -51,6 +51,22 @@ describe("repository data check", () => {
       reason: "non-regular archive entry",
     });
   });
+
+  it("rejects opaque binary content in a packed archive", () => {
+    const root = mkdtempSync(join(tmpdir(), "connectors-archive-"));
+    temporary.push(root);
+    mkdirSync(join(root, "package", "dist"), { recursive: true });
+    writeFileSync(
+      join(root, "package", "dist", "example.bin"),
+      Buffer.from([0, 1, 2]),
+    );
+    const archive = join(root, "example.tgz");
+    execFileSync("tar", ["-czf", archive, "-C", root, "package"]);
+    expect(scanPackedArchive(archive)).toContainEqual({
+      path: "packed/dist/example.bin",
+      reason: "non-text archive entry",
+    });
+  });
   it("allows synthetic identifiers and detects a planted configuration", () => {
     const example = {
       tenant: "example",
