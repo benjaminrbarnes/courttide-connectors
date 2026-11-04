@@ -4,5 +4,6 @@
 
 - Add the read-only connector contract, shared runtime and synthetic conformance kit.
 - Add anonymous ActiveNet and CivicRec platform connectors.
+- Add a single-court CLI with offline fixtures and local recording.
 - Expose the CivicRec hours parser through the testing entrypoint for synthetic parity checks.
 - Preserve retryability when reporting a failed operation to its gate.
