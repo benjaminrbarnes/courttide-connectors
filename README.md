@@ -59,8 +59,8 @@ reads, supply your own configuration, HTTP runtime and shared gate as described
 in the [contract](docs/CONTRACT.md) and [tenant guide](docs/TENANT-CONFIG.md).
 The package has not yet been published to npm.
 
-Want many parks? The planned [CourtTide public MCP](https://courttide.com/mcp/public)
-will provide a shared alternative.
+For saved times across parks, use [CourtTide's keyed MCP](https://courttide.com/docs/agents).
+The [CourtTide public MCP](https://courttide.com/mcp/public) is planned.
 
 ## Contributing
 
