@@ -153,6 +153,7 @@ export interface GateOutcome {
   status?: number;
   error?: ConnectorErrorCode;
   retryAfterMs?: number | null;
+  retryable?: boolean;
 }
 export interface Gate {
   acquire(request: GateRequest): Promise<GateTicket>;

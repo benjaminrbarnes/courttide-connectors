@@ -8,6 +8,7 @@ import {
   CourtReadingSchema,
   CourtSelectionSchema,
   GateDeferred,
+  GateOutcomeSchema,
   TenantConfigSchema,
   readingSchema,
 } from "../packages/connectors/src/index.js";
@@ -67,6 +68,29 @@ function reading() {
 }
 
 describe("contract schemas", () => {
+  it("validates optional retryability on failed gate outcomes", () => {
+    expect(
+      GateOutcomeSchema.safeParse({
+        ok: false,
+        error: "http_error",
+        retryable: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      GateOutcomeSchema.safeParse({ ok: false, error: "http_error" }).success,
+    ).toBe(true);
+    expect(
+      GateOutcomeSchema.safeParse({ ok: true, retryable: false }).success,
+    ).toBe(false);
+    expect(
+      GateOutcomeSchema.safeParse({
+        ok: false,
+        error: "http_error",
+        retryable: "true",
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts the synthetic config and keeps generated schemas synchronized", () => {
     expect(TenantConfigSchema.safeParse(config).success).toBe(true);
     for (const file of readdirSync("examples/tenants")) {

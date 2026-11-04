@@ -240,6 +240,36 @@ describe("legacy response classification", () => {
     }
   });
 
+  it("reports timeout and ordinary fetch failures distinctly to a per-request gate", async () => {
+    for (const retryable of [true, false]) {
+      const recording = createRecordingGate();
+      const failure = new Error("example-sensitive");
+      if (retryable) failure.name = "TimeoutError";
+      const client = runtime(
+        civicTenant,
+        civicRecLegacyProfile,
+        recording.gate,
+        async () => {
+          throw failure;
+        },
+      );
+      await expect(
+        client.execute(() => client.http.request(civicRequest())),
+      ).rejects.toMatchObject({ code: "http_error", retryable });
+      expect(recording.calls).toHaveLength(2);
+      expect(recording.calls.at(-1)).toEqual({
+        type: "release",
+        ticket: 1,
+        outcome: {
+          ok: false,
+          error: "http_error",
+          retryAfterMs: null,
+          retryable,
+        },
+      });
+    }
+  });
+
   it("sanitizes transport failures and preserves only typed error controls", async () => {
     for (const [original, code, retryable, delay] of [
       [new Error("example-sensitive"), "http_error", false, null],
@@ -276,7 +306,7 @@ describe("legacy response classification", () => {
       expect(JSON.stringify(error)).not.toContain("example-sensitive");
       expect(recording.calls.at(-1)).toMatchObject({
         type: "release",
-        outcome: { ok: false, error: code, retryAfterMs: delay },
+        outcome: { ok: false, error: code, retryAfterMs: delay, retryable },
       });
     }
     for (const timeout of [false, true]) {
@@ -492,6 +522,7 @@ describe("legacy response classification", () => {
         status: 200,
         error: "access_blocked",
         retryAfterMs: null,
+        retryable: false,
       },
     });
   });
@@ -589,7 +620,12 @@ describe("legacy response classification", () => {
     expect(recording.calls.at(-1)).toEqual({
       type: "release",
       ticket: 1,
-      outcome: { ok: false, error: "http_error", retryAfterMs: null },
+      outcome: {
+        ok: false,
+        error: "http_error",
+        retryAfterMs: null,
+        retryable: true,
+      },
     });
     const cancel = vi.fn();
     resolveFetch(new Response(new ReadableStream({ cancel })));

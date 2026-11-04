@@ -14,7 +14,8 @@
     "outcome": {
       "ok": false,
       "error": "http_error",
-      "retryAfterMs": null
+      "retryAfterMs": null,
+      "retryable": true
     }
   }
 ]
