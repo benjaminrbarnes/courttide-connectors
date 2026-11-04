@@ -15,7 +15,8 @@
       "ok": false,
       "status": 200,
       "error": "unsupported_time",
-      "retryAfterMs": null
+      "retryAfterMs": null,
+      "retryable": false
     }
   }
 ]

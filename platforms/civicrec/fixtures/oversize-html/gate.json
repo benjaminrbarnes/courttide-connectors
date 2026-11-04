@@ -15,7 +15,8 @@
       "ok": false,
       "status": 200,
       "error": "schema_changed",
-      "retryAfterMs": null
+      "retryAfterMs": null,
+      "retryable": false
     }
   }
 ]

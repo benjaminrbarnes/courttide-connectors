@@ -15,7 +15,8 @@
       "ok": false,
       "status": 429,
       "error": "rate_limited",
-      "retryAfterMs": null
+      "retryAfterMs": null,
+      "retryable": false
     }
   }
 ]

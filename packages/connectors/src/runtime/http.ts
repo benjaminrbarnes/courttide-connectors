@@ -113,12 +113,14 @@ function gateOutcome(
       ...(status === undefined ? {} : { status }),
       error: error.code as ConnectorErrorCode,
       retryAfterMs: delay,
+      retryable: "retryable" in error && error.retryable === true,
     };
   }
   return {
     ok: false,
     ...(status === undefined ? {} : { status }),
     error: "http_error",
+    retryable: false,
   };
 }
 

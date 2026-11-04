@@ -15,7 +15,8 @@
       "ok": false,
       "status": 503,
       "error": "http_error",
-      "retryAfterMs": null
+      "retryAfterMs": null,
+      "retryable": true
     }
   }
 ]

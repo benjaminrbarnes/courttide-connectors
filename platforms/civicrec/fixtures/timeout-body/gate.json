@@ -32,7 +32,8 @@
       "ok": false,
       "status": 200,
       "error": "http_error",
-      "retryAfterMs": null
+      "retryAfterMs": null,
+      "retryable": true
     }
   }
 ]
