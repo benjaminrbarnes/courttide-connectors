@@ -1,0 +1,12 @@
+[
+  {
+    "type": "acquire",
+    "request": {
+      "court": "900001",
+      "purpose": "calendar",
+      "method": "GET",
+      "url": "https://example.invalid/calendar/900001?date=2026-11-04"
+    }
+  },
+  { "type": "release", "ticket": 1, "outcome": { "ok": true, "status": 200 } }
+]

@@ -1,0 +1,13 @@
+[
+  {
+    "url": "https://example.invalid/calendar/900001?date=2026-11-04",
+    "init": {
+      "method": "GET",
+      "headers": { "accept": "application/json" },
+      "credentials": "omit",
+      "redirect": "manual",
+      "cache": "no-store",
+      "signal": "present"
+    }
+  }
+]

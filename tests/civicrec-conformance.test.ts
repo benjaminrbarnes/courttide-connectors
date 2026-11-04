@@ -1,5 +1,17 @@
+import {
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
-import { runConformance } from "../packages/connectors/src/testing/index.js";
+import {
+  CONFORMANCE_CASES,
+  runConformance,
+} from "../packages/connectors/src/testing/index.js";
 import { civicRecPlatform } from "../packages/connectors/src/platforms/civicrec/index.js";
 
 it("passes the synthetic CivicRec conformance matrix", async () => {
@@ -26,4 +38,36 @@ it("passes the synthetic CivicRec conformance matrix", async () => {
     },
   );
   expect(result.fixtures).toBeGreaterThan(20);
+});
+
+it("replays distinct response and final observation times", async () => {
+  const root = mkdtempSync(join(tmpdir(), "connector-fixture-"));
+  try {
+    const directory = join(root, "open");
+    cpSync("platforms/civicrec/fixtures/open", directory, { recursive: true });
+    const metaPath = join(directory, "meta.json");
+    const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+    meta.configPath = resolve("examples/tenants/civicrec.json");
+    meta.clockSequence = [
+      "2026-11-04T12:00:00.000Z",
+      "2026-11-04T12:00:12.000Z",
+      "2026-11-04T12:00:13.000Z",
+    ];
+    writeFileSync(metaPath, JSON.stringify(meta));
+    const outputPath = join(directory, "expected.json");
+    const output = JSON.parse(readFileSync(outputPath, "utf8"));
+    output.days[0].observedAt = "2026-11-04T12:00:12Z";
+    output.observedAt = "2026-11-04T12:00:13.000Z";
+    writeFileSync(outputPath, JSON.stringify(output));
+    const inapplicableCases = Object.fromEntries(
+      CONFORMANCE_CASES.filter((name) => name !== "open_interval").map(
+        (name) => [name, "This fixture exercises one synthetic read."],
+      ),
+    );
+    await expect(
+      runConformance(civicRecPlatform, root, { inapplicableCases }),
+    ).resolves.toEqual({ fixtures: 1, cases: ["open_interval"] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
