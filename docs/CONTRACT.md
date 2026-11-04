@@ -235,6 +235,11 @@ session key or cookie on a bootstrapped platform must fail with
 `schema_changed`. A rejected request has no gate calls; a deferred acquire has
 no release; a parser-time block reaches the applicable release.
 
+Recorded header objects keep their original key order, spelling and string
+values. Header tuple arrays keep their order and duplicates. An already-created
+`Headers` object is recorded distinctly as `{kind: "Headers", entries: [...]}`
+using its observable entries.
+
 The repository data check scans tracked text and the packed package for
 non-example identifiers, tenant and catalog paths, slugs, unmarked hashes,
 non-synthetic fixture metadata and private references. It does not replace a

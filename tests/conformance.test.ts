@@ -387,6 +387,41 @@ describe("conformance kit", () => {
     await expect(record.gate.release(ticket, { ok: true })).rejects.toThrow();
   });
 
+  it("records original header representation, spelling, order and bytes", async () => {
+    const fake = createFakeFetch([{ body: "" }, { body: "" }, { body: "" }]);
+    const record = {
+      "X-Example": "  Example Value  ",
+      cookie: "example=one; example-b=two",
+      Accept: "application/json",
+    };
+    const recordJson = JSON.stringify(record);
+    await fake.fetch("http://localhost:3000/", { headers: record });
+    record["X-Example"] = "changed";
+    expect(JSON.stringify(fake.requests[0]!.init.headers)).toBe(recordJson);
+
+    const tuples: [string, string][] = [
+      ["X-Example", "First"],
+      ["x-example", "Second"],
+      ["cookie", "example=one; example-b=two"],
+    ];
+    const tuplesJson = JSON.stringify(tuples);
+    await fake.fetch("http://localhost:3000/", { headers: tuples });
+    tuples[0]![1] = "changed";
+    expect(JSON.stringify(fake.requests[1]!.init.headers)).toBe(tuplesJson);
+
+    const headers = new Headers([
+      ["X-Example", " Value "],
+      ["Accept", "application/json"],
+    ]);
+    const serialized = JSON.stringify({
+      kind: "Headers",
+      entries: [...headers.entries()],
+    });
+    await fake.fetch("http://localhost:3000/", { headers });
+    headers.set("X-Example", "changed");
+    expect(JSON.stringify(fake.requests[2]!.init.headers)).toBe(serialized);
+  });
+
   it("keeps fetch and clock deterministic and simulates body and transport failures", async () => {
     const fake = createFakeFetch([
       { status: 200, body: "example" },

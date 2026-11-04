@@ -31,6 +31,17 @@ function failure(kind: "timeout" | "network") {
     : new TypeError("Synthetic network failure");
 }
 
+function cloneHeaders(value: unknown): unknown {
+  if (value instanceof Headers) {
+    return { kind: "Headers", entries: [...value.entries()] };
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => (Array.isArray(entry) ? [...entry] : entry));
+  }
+  if (value && typeof value === "object") return { ...value };
+  return value;
+}
+
 export function createFakeFetch(responses: readonly FakeResponse[]): FakeFetch {
   const requests: RecordedFetch[] = [];
   let next = 0;
@@ -40,8 +51,7 @@ export function createFakeFetch(responses: readonly FakeResponse[]): FakeFetch {
     if (init) {
       for (const [key, value] of Object.entries(init)) {
         if (value === undefined) continue;
-        if (key === "headers")
-          captured[key] = Object.fromEntries(new Headers(value as HeadersInit));
+        if (key === "headers") captured[key] = cloneHeaders(value);
         else if (key === "signal")
           captured[key] = value === null ? null : "present";
         else if (
