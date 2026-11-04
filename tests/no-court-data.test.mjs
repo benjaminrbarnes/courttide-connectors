@@ -222,6 +222,8 @@ describe("repository data check", () => {
     );
   });
 
+  // This case runs multiple npm pack subprocesses and can exceed the default
+  // timeout when the machine is busy.
   it("scans tracked text and an ignored file that is included in the packed package", () => {
     const root = mkdtempSync(join(tmpdir(), "connectors-check-"));
     temporary.push(root);
@@ -297,5 +299,5 @@ describe("repository data check", () => {
       path: "unicode.txt",
       reason: "non-example identifier",
     });
-  });
+  }, 20000);
 });

@@ -295,15 +295,23 @@ export const GateOutcomeSchema = z
         message: "Failed outcomes require an error code",
       });
   });
-export const TransportProfileSchema = z.object({
+export const TransportProfileSchema = z.strictObject({
   retryAfter: z.enum(["strict-imf", "lenient"]),
   successStatuses: z.enum(["any-2xx", "200-only"]),
+  classificationOrder: z.enum(["headers-first", "legacy-body-first"]),
+  headerNames: z.enum(["preserve", "lowercase"]),
+  fetchInput: z.enum(["url", "string"]),
+  abortRetryable: z.enum(["timeout-only", "any-abort"]),
   redirectHeaders: z.array(z.string()),
-  readBodyOnlyOnSuccess: z.boolean(),
   contentLengthChecks: z.boolean(),
   jsonContentTypes: z.array(z.string()),
   htmlContentTypes: z.array(z.string()),
-  challenge: z.object({ passiveAssets: z.array(z.string()) }).nullable(),
+  challenge: z
+    .object({
+      passiveAssets: z.array(z.string()),
+      scope: z.enum(["html-or-leading", "all"]),
+    })
+    .nullable(),
   headers: z.record(
     z.string(),
     z.object({
@@ -322,10 +330,10 @@ export const TransportProfileSchema = z.object({
   cookieJar: z
     .object({
       cookieDomains: z.array(z.string()),
-      maxCookies: z.int().positive(),
-      maxBytes: z.int().positive(),
-      rejectPartitioned: z.boolean(),
-      enforceSecurePrefixes: z.boolean(),
+      maxCookies: z.literal(16),
+      maxBytes: z.literal(16384),
+      rejectPartitioned: z.literal(true),
+      enforceSecurePrefixes: z.literal(true),
       pathFor: CallbackSchema,
     })
     .nullable(),

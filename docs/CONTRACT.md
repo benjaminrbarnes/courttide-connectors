@@ -19,9 +19,13 @@ does not schedule, retry, book or infer that unreported time is unavailable.
   methods, path grammar and headers. Booking, cart, hold, checkout and account
   calls are outside the contract.
 - Every request goes through the injected `HttpClient` and `Gate`. A connector
-  does not call `fetch` directly or add headers outside its transport profile.
+  does not call `fetch` directly or explicitly add or forward headers outside
+  its transport profile. The native HTTP stack may add its own default headers;
+  the connector and runtime do not suppress or spoof them.
 - Connectors do not retry. They throw `ConnectorError` with retry information;
-  the caller decides what happens next. Errors thrown by a gate pass through.
+  the caller decides what happens next. Gate acquisition errors pass through.
+  A per-request release failure is sanitized; a per-read release failure passes
+  through to its caller.
 - Public platforms require no credentials. Outputs contain no cookies, session
   keys, member tokens or personal details. Public fixtures are synthetic.
 - Court keys stay stable. Parser versions and reason codes are persisted by
@@ -119,25 +123,46 @@ The injected `HttpClient.request` receives court, purpose, GET or read-only
 POST, URL, allowed headers, optional string body and expected JSON or HTML. It
 returns status, headers, text and requested/received instants. A request rejected
 by the allowlist makes no gate calls; rejected bodies are cancelled.
+`createConnectorRuntime` takes the tenant, profile, lease scope, gate, fetch and
+clock explicitly. Wrap each read or identity operation with its `execute`
+method so a per-read lease includes parsing.
+
+For a profile with cookies, the runtime keeps bootstrap `Set-Cookie` rows only
+in memory and sends a cookie header only when it matches a scoped jar issued to
+that runtime. An unknown cookie is rejected before gate admission. Keep a
+stateful connector and its runtime together; callers still own session reuse.
 
 Discovery and live checks share one gate per connector and upstream target
 across courts, workers and iterations. Requests are at least 10 seconds apart,
 with ceilings of 6 per rolling minute, 20 per rolling 10 minutes and 30 per
 rolling hour. These are limits, not quotas. Separate processes coordinate through
 the caller's existing admission, gate, lease, priority and backoff.
+`politeGate` provides those limits in memory for development: share the same
+instance among concurrent clients for an upstream target. A rate limit rejects
+queued work and enforces a backoff; an access block stops the gate. Scheduled
+production collection supplies its own gate and retains its existing cadence.
 
 `leaseScope: "per_read"` releases after the whole read or identity check,
 including parsing, and reports its final outcome. `"per_request"` releases
 after each response is classified, including a platform's payload-level
 classification hook. This distinction ensures parser-time access blocks reach
-the appropriate gate.
+the appropriate gate. A `per_read` operation may make one request; a second
+request fails before gate admission. A platform with multiple requests per
+operation uses `per_request` in version 1.
 
-Transport profiles declare retry-after parsing, success statuses, redirect
-headers, body-read policy, content-length checks, accepted content types,
+Transport profiles declare retry-after parsing, success statuses, classification
+order, header-name handling, fetch input form, abort retry behavior, redirect
+headers, content-length checks, accepted content types,
 challenge rules, allowed headers, method-specific URL grammar, cookie-jar
 policy and an optional classifier. Header rules can require an exact value,
 limit length or forbid a header for particular purposes. URL grammar validates
-method, segment count, identifiers, dates and query, rather than only a prefix.
+method, segment count, identifiers, dates and query, rather than only a prefix;
+it receives the runtime tenant and request purpose so it can bind paths to the
+configured origin and tenant. The strict cookie jar allows configured domains;
+its row limit, byte limit, partition and secure-prefix rules are fixed.
+Classification order controls when a successful response's body is read. Error
+statuses are classified and their bodies cancelled unread in all profiles.
+Unsupported profile fields are rejected.
 
 Existing profiles retain their platform behavior:
 
@@ -164,7 +189,7 @@ clamping a past date to zero. Lenient parsing accepts up to eight digit seconds
 or a parseable date of up to 80 characters; a negative or non-finite delay is
 not retryable. Both use the injected clock.
 
-Classify requests in this order: fetch failure, redirect, 401/403, 429, 5xx,
+The standard profile classifies requests in this order: fetch failure, redirect, 401/403, 429, 5xx,
 other statuses, content length, content type, bounded UTF-8 body, HTML in place
 of JSON, challenge, JSON parsing, then the platform classifier. Fetch and stream
 errors are `http_error`, retryable only when timeout-like. A redirect or 401/403
@@ -175,7 +200,14 @@ Wrong content type, HTML instead of JSON or a challenge is `access_blocked`;
 an absent, malformed, oversized or invalid UTF-8 body is `schema_changed`. The
 15-second timeout starts after acquire and covers headers and body. New profiles
 default to strict Retry-After, any 2xx, no redirect headers, body reads only on
-success and JSON content type.
+success and JSON content type. CivicRec's explicit legacy-body-first profile
+first rejects `response.redirected` and leaves non-200 bodies unread. For a 200,
+it checks Content-Length, reads the bounded body, checks unencoded length, then
+decodes fatal UTF-8 before checking Location, Refresh, content type and payload.
+An empty HTML body reaches the bootstrap parser after a successful per-request
+release. This preserves the existing order for compound failures. CivicRec also
+treats an externally aborted request as retryable; ActiveNet and the default
+profile retry only timeout-like failures.
 
 ## Shapes and reason codes
 
@@ -215,10 +247,11 @@ shapes. New platform codes are documented by that platform and retain meaning.
 
 `@courttide/connectors/testing` exports `runConformance`, a scripted fake
 fetch, recording gate, frozen clock and the case matrix. The runner takes a
-platform, fixture directory and an injected runtime harness factory. The
-factory receives the fake fetch, recording gate, tenant and clock, and returns
-an `HttpClient` plus an operation wrapper. The wrapper lets a runtime release a
-per-read ticket after parsing. The kit does not itself implement transport.
+platform and fixture directory and uses the shared runtime with the scripted
+fetch and a frozen wall and monotonic clock. An optional harness factory can instead receive the fake fetch, recording
+gate, tenant and clock and return an `HttpClient` and operation wrapper. The
+wrapper lets a runtime release a per-read ticket after parsing. The default
+does not use a live network; an injected harness must use the supplied fake fetch.
 
 Each case directory contains `meta.json` with a source, case names, `clockNow`,
 configuration path, court and date range. It has `responses.json`,
@@ -234,11 +267,14 @@ the reading and checks sanitized output against marked secrets. A reflected
 session key or cookie on a bootstrapped platform must fail with
 `schema_changed`. A rejected request has no gate calls; a deferred acquire has
 no release; a parser-time block reaches the applicable release.
+These comparisons cover the supplied fetch initialization, not headers added by
+the native HTTP stack on the wire.
 
 Recorded header objects keep their original key order, spelling and string
 values. Header tuple arrays keep their order and duplicates. An already-created
 `Headers` object is recorded distinctly as `{kind: "Headers", entries: [...]}`
-using its observable entries.
+using its observable entries. Synthetic response fixtures may use ordered
+header tuples for repeated fields and `bodyBytes` for exact byte sequences.
 
 The repository data check scans tracked text and the packed package for
 non-example identifiers, tenant and catalog paths, slugs, unmarked hashes,

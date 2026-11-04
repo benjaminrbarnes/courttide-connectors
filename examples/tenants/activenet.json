@@ -4,7 +4,7 @@
   "platform": "activenet",
   "tenant": "exampleparks",
   "timeZone": "UTC",
-  "origin": "https://example.invalid",
+  "origin": "https://anc.apm.activecommunities.com",
   "params": { "basePath": "/exampleparks" },
   "parks": [
     {
