@@ -295,7 +295,7 @@ export const GateOutcomeSchema = z
         message: "Failed outcomes require an error code",
       });
   });
-export const TransportProfileSchema = z.object({
+export const TransportProfileSchema = z.strictObject({
   retryAfter: z.enum(["strict-imf", "lenient"]),
   successStatuses: z.enum(["any-2xx", "200-only"]),
   classificationOrder: z.enum(["headers-first", "legacy-body-first"]),
@@ -303,7 +303,6 @@ export const TransportProfileSchema = z.object({
   fetchInput: z.enum(["url", "string"]),
   abortRetryable: z.enum(["timeout-only", "any-abort"]),
   redirectHeaders: z.array(z.string()),
-  readBodyOnlyOnSuccess: z.boolean(),
   contentLengthChecks: z.boolean(),
   jsonContentTypes: z.array(z.string()),
   htmlContentTypes: z.array(z.string()),

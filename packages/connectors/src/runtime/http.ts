@@ -59,11 +59,7 @@ interface CookieProof {
   receivedAt: string;
 }
 
-function safeError(
-  error: unknown,
-  signal: AbortSignal,
-  profile: TransportProfile,
-): ConnectorError {
+function safeError(error: unknown, retryable: boolean): ConnectorError {
   if (
     error &&
     typeof error === "object" &&
@@ -87,10 +83,7 @@ function safeError(
       delay,
     );
   }
-  return new ConnectorError(
-    "http_error",
-    isTimeoutError(error, signal, profile.abortRetryable),
-  );
+  return new ConnectorError("http_error", retryable);
 }
 
 function gateOutcome(
@@ -149,6 +142,13 @@ export function createConnectorRuntime(
   const scopes = new AsyncLocalStorage<ReadScope>();
   const monotonicNow = options.monotonicNow ?? (() => performance.now());
   const cookieProofs: CookieProof[] = [];
+  async function releaseRequest(ticket: GateTicket, outcome: GateOutcome) {
+    try {
+      await options.gate.release(ticket, outcome);
+    } catch (error) {
+      throw safeError(error, false);
+    }
+  }
   const http: HttpClient = {
     async request(input: HttpRequest) {
       const request = snapshotRequest(input, options.tenant, options.profile);
@@ -294,7 +294,10 @@ export function createConnectorRuntime(
       }
       return result;
     } catch (error) {
-      failure = safeError(error, signal, options.profile);
+      failure = safeError(
+        error,
+        isTimeoutError(error, signal, options.profile.abortRetryable),
+      );
       throw failure;
     } finally {
       if (response instanceof Response)
@@ -302,7 +305,7 @@ export function createConnectorRuntime(
       clearTimeout(timer);
       controller.abort();
       if (options.leaseScope === "per_request")
-        await options.gate.release(
+        await releaseRequest(
           ticket,
           gateOutcome(failure === undefined, failure, status),
         );

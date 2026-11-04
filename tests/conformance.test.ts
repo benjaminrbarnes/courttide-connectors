@@ -52,7 +52,6 @@ const transport: TransportProfile = {
   fetchInput: "url",
   abortRetryable: "timeout-only",
   redirectHeaders: [],
-  readBodyOnlyOnSuccess: true,
   contentLengthChecks: false,
   jsonContentTypes: ["application/json"],
   htmlContentTypes: [],

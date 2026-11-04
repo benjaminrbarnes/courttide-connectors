@@ -301,6 +301,90 @@ describe("legacy response classification", () => {
     }
   });
 
+  it("sanitizes a per-request release failure without retrying or reacquiring", async () => {
+    const raw = Object.assign(
+      new Error("example-sensitive", { cause: new Error("example-sensitive") }),
+      { detail: "example-sensitive" },
+    );
+    const timeout = Object.assign(new Error("example-sensitive"), {
+      name: "TimeoutError",
+      detail: "example-sensitive",
+    });
+    const typed = Object.assign(
+      new ConnectorError("rate_limited", true, 23000),
+      {
+        detail: "example-sensitive",
+      },
+    );
+    for (const [status, original, expected] of [
+      [200, raw, new ConnectorError("http_error", false, null)],
+      [503, timeout, new ConnectorError("http_error", false, null)],
+      [200, typed, new ConnectorError("rate_limited", true, 23000)],
+    ] as const) {
+      const ticket = {};
+      const acquire = vi.fn(async () => ticket);
+      const release = vi.fn(async () => {
+        throw original;
+      });
+      const fetcher = vi.fn<typeof fetch>(
+        async () =>
+          new Response("{}", {
+            status,
+            headers: { "content-type": "application/json" },
+          }),
+      );
+      const client = runtime(
+        civicTenant,
+        civicRecLegacyProfile,
+        { acquire, release },
+        fetcher,
+      );
+      const error = await client
+        .execute(() => client.http.request(civicRequest()))
+        .catch((caught: unknown) => caught);
+      expect(error).toEqual(expected);
+      expect(error).not.toBe(original);
+      expect(error).not.toHaveProperty("detail");
+      expect(error).not.toHaveProperty("cause");
+      expect((error as Error).message).toBe(expected.code);
+      expect(JSON.stringify(error)).not.toContain("example-sensitive");
+      expect(acquire).toHaveBeenCalledOnce();
+      expect(fetcher).toHaveBeenCalledOnce();
+      expect(release).toHaveBeenCalledOnce();
+      expect(release).toHaveBeenCalledWith(
+        ticket,
+        expect.objectContaining({ status }),
+      );
+    }
+  });
+
+  it("preserves a per-read release failure for the caller", async () => {
+    const original = new Error("example-control");
+    const acquire = vi.fn(async () => ({}));
+    const release = vi.fn(async () => {
+      throw original;
+    });
+    const fetcher = vi.fn<typeof fetch>(
+      async () =>
+        new Response("{}", { headers: { "content-type": "application/json" } }),
+    );
+    const client = runtime(
+      activeTenant,
+      activeNetLegacyProfile,
+      { acquire, release },
+      fetcher,
+      {
+        leaseScope: "per_read",
+      },
+    );
+    await expect(
+      client.execute(() => client.http.request(activeRequest())),
+    ).rejects.toBe(original);
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it("does not compare decoded content with compressed wire length", async () => {
     const response = new Response("{}", {
       headers: {

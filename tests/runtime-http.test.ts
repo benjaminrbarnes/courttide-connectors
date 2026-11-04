@@ -27,7 +27,6 @@ describe("runtime request and lease behavior", () => {
       fetchInput: "url",
       abortRetryable: "timeout-only",
       redirectHeaders: [],
-      readBodyOnlyOnSuccess: false,
       contentLengthChecks: false,
       jsonContentTypes: ["application/json"],
       challenge: null,
@@ -41,7 +40,6 @@ describe("runtime request and lease behavior", () => {
       fetchInput: "string",
       abortRetryable: "any-abort",
       redirectHeaders: ["location", "refresh"],
-      readBodyOnlyOnSuccess: true,
       contentLengthChecks: true,
       jsonContentTypes: ["application/json", "text/json"],
       htmlContentTypes: ["text/html"],
@@ -70,6 +68,20 @@ describe("runtime request and lease behavior", () => {
         }),
       ).toThrowError(expect.objectContaining({ code: "schema_changed" }));
     }
+    const obsoleteProfile = {
+      ...civicRecLegacyProfile,
+      readBodyOnlyOnSuccess: false,
+    };
+    expect(() =>
+      createConnectorRuntime({
+        tenant: civicTenant,
+        profile: obsoleteProfile,
+        gate: recording.gate,
+        fetch: fetcher,
+        now: () => new Date(),
+        leaseScope: "per_request",
+      }),
+    ).toThrowError(expect.objectContaining({ code: "schema_changed" }));
     expect(recording.calls).toEqual([]);
     expect(fetcher).not.toHaveBeenCalled();
   });

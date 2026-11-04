@@ -23,7 +23,9 @@ does not schedule, retry, book or infer that unreported time is unavailable.
   its transport profile. The native HTTP stack may add its own default headers;
   the connector and runtime do not suppress or spoof them.
 - Connectors do not retry. They throw `ConnectorError` with retry information;
-  the caller decides what happens next. Errors thrown by a gate pass through.
+  the caller decides what happens next. Gate acquisition errors pass through.
+  A per-request release failure is sanitized; a per-read release failure passes
+  through to its caller.
 - Public platforms require no credentials. Outputs contain no cookies, session
   keys, member tokens or personal details. Public fixtures are synthetic.
 - Court keys stay stable. Parser versions and reason codes are persisted by
@@ -150,7 +152,7 @@ operation uses `per_request` in version 1.
 
 Transport profiles declare retry-after parsing, success statuses, classification
 order, header-name handling, fetch input form, abort retry behavior, redirect
-headers, body-read policy, content-length checks, accepted content types,
+headers, content-length checks, accepted content types,
 challenge rules, allowed headers, method-specific URL grammar, cookie-jar
 policy and an optional classifier. Header rules can require an exact value,
 limit length or forbid a header for particular purposes. URL grammar validates
@@ -158,6 +160,9 @@ method, segment count, identifiers, dates and query, rather than only a prefix;
 it receives the runtime tenant and request purpose so it can bind paths to the
 configured origin and tenant. The strict cookie jar allows configured domains;
 its row limit, byte limit, partition and secure-prefix rules are fixed.
+Classification order controls when a successful response's body is read. Error
+statuses are classified and their bodies cancelled unread in all profiles.
+Unsupported profile fields are rejected.
 
 Existing profiles retain their platform behavior:
 

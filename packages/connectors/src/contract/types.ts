@@ -201,7 +201,6 @@ export interface TransportProfile {
   fetchInput: "url" | "string";
   abortRetryable: "timeout-only" | "any-abort";
   redirectHeaders: readonly string[];
-  readBodyOnlyOnSuccess: boolean;
   contentLengthChecks: boolean;
   jsonContentTypes: readonly string[];
   htmlContentTypes: readonly string[];
