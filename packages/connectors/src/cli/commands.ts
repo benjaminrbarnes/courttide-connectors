@@ -374,6 +374,11 @@ async function commandTestLive(
       } else if (
         code === "rate_limited" ||
         (httpStatus !== undefined && httpStatus >= 500) ||
+        (code === "http_error" &&
+          error &&
+          typeof error === "object" &&
+          "retryable" in error &&
+          error.retryable === true) ||
         (httpStatus === undefined && code === "http_error") ||
         (error instanceof Error && error.name === "GateDeferred")
       ) {

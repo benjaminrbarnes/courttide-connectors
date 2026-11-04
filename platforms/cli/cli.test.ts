@@ -773,6 +773,43 @@ describe("connector CLI", () => {
     }
   });
 
+  it("reports a retryable body timeout as inconclusive after successful headers", async () => {
+    const output = io();
+    const status = await runCli(
+      [
+        "test:live",
+        "--config",
+        config,
+        "--platform",
+        "activenet",
+        "--courts",
+        "900001",
+        "--date",
+        "2026-01-02",
+      ],
+      {
+        ...output.value,
+        ci: false,
+        fetch: async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(
+                  Object.assign(new Error("example timeout"), {
+                    name: "TimeoutError",
+                  }),
+                );
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          ),
+      },
+    );
+    expect(status).toBe(2);
+    expect(output.out.join("\n")).toContain("inconclusive=1");
+    expect(output.out.join("\n")).not.toContain("900001");
+  });
+
   it("rejects unsupported platform configs instead of skipping validation", async () => {
     const temp = mkdtempSync(join(tmpdir(), "connectors-unknown-platform-"));
     const invalid = JSON.parse(readFileSync(join(root, config), "utf8"));
