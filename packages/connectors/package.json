@@ -1,6 +1,6 @@
 {
   "name": "@courttide/connectors",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only connectors for court availability",
   "license": "MIT",
   "type": "module",

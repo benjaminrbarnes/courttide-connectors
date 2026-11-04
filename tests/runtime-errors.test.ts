@@ -311,7 +311,7 @@ describe("legacy response classification", () => {
     });
   });
 
-  it("sanitizes transport failures and preserves only typed error controls", async () => {
+  it("sanitizes raw transport failures independently of classifier controls", async () => {
     for (const [original, code, retryable, delay] of [
       [new Error("example-sensitive"), "http_error", false, null],
       [
@@ -324,9 +324,9 @@ describe("legacy response classification", () => {
         Object.assign(new ConnectorError("rate_limited", true, 23000), {
           detail: "example-sensitive",
         }),
-        "rate_limited",
-        true,
-        23000,
+        "http_error",
+        false,
+        null,
       ],
     ] as const) {
       const recording = createRecordingGate();

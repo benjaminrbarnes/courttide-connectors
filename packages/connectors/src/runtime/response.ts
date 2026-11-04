@@ -4,7 +4,7 @@ import type {
   HttpResponse,
   TransportProfile,
 } from "../contract/types.js";
-import { bounded } from "./async.js";
+import { bounded, transportFailure } from "./async.js";
 import { detectChallenge } from "./challenge.js";
 import { parseRetryAfter } from "./retry-after.js";
 
@@ -15,6 +15,9 @@ export interface ResponseClock {
   receivedAt(): string;
   deadline(): void;
   signal: AbortSignal;
+  abortError?: () => unknown;
+  beforeDispose?: () => void;
+  normalizeFailure?: (error: unknown) => unknown;
 }
 
 function checkStatus(
@@ -114,7 +117,12 @@ export async function processResponse(
     const chunks: Uint8Array[] = [];
     let size = 0;
     while (reader) {
-      const part = await bounded(reader.read(), clock.signal);
+      let part: ReadableStreamReadResult<Uint8Array>;
+      try {
+        part = await bounded(reader.read(), clock.signal, clock.abortError);
+      } catch (error) {
+        throw transportFailure(error, clock.signal, profile);
+      }
       clock.deadline();
       if (part.done) break;
       if (!(part.value instanceof Uint8Array))
@@ -173,7 +181,10 @@ export async function processResponse(
       requestedAt,
       receivedAt,
     };
+  } catch (error) {
+    throw clock.normalizeFailure ? clock.normalizeFailure(error) : error;
   } finally {
+    clock.beforeDispose?.();
     try {
       if (reader) await reader.cancel();
       else await response.body?.cancel();

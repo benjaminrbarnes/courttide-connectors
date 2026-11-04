@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
 import type { ATTRIBUTION } from "./constants.js";
+import type { ConnectorError } from "./errors.js";
 
 export type PlatformId = string;
 export type TenantKey = string;
@@ -201,6 +202,12 @@ export interface TransportProfile {
   headerNames: "preserve" | "lowercase";
   fetchInput: "url" | "string";
   abortRetryable: "timeout-only" | "any-abort";
+  timeoutSignal?: "controller" | "native";
+  timeoutReason?: "timeout-error" | "abort-error";
+  abortFailure?: "reason" | "retryable-http";
+  cleanupAbort?: "before-body" | "after-body" | "none";
+  transportErrors?: "preserve" | "http-only";
+  classifyTransportError?: (error: unknown) => ConnectorError | undefined;
   redirectHeaders: readonly string[];
   contentLengthChecks: boolean;
   jsonContentTypes: readonly string[];

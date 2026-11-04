@@ -220,6 +220,25 @@ failure retryable only when its signal was actually aborted; a timeout-named
 error alone does not qualify. ActiveNet and the default profile also recognize
 timeout-like errors and causes without an aborted signal.
 
+Optional transport policies preserve observable cancellation behavior.
+`timeoutSignal: "native"` uses `AbortSignal.timeout(15000)` and its native
+reason and lifetime; otherwise a controller owns the deadline.
+`timeoutReason: "abort-error"` makes that controller abort with its default
+`AbortError` instead of `TimeoutError`. `abortFailure: "retryable-http"`
+normalizes a bounded abort or deadline to a retryable `http_error` without
+changing the fetch signal's reason. `cleanupAbort` selects `before-body`,
+`after-body` (the default), or `none` for controller cleanup. ActiveNet uses
+the native timeout without a cleanup abort. CivicRec aborts before body
+disposal and preserves failure classification from before that cleanup, so a
+non-aborted stream failure does not become retryable merely during disposal.
+Both legacy profiles use `transportErrors: "http-only"`: errors thrown by
+fetch or stream reads are HTTP failures, even when the thrown value resembles
+a classified connector error. A caller can explicitly map its own trusted
+error instances with `classifyTransportError`; returning `undefined` keeps
+the ordinary transport policy. Classification and gate failures retain their
+typed controls. Profiles that omit `transportErrors` preserve the previous
+typed transport-error behavior.
+
 ## Shapes and reason codes
 
 `full_calendar` lists open and taken slots, so a usable complete day may have
