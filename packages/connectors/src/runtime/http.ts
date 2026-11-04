@@ -217,14 +217,32 @@ export function createConnectorRuntime(
     });
     scope?.tickets.push(ticket);
     const controller = new AbortController();
-    const signal = options.signal
-      ? AbortSignal.any([controller.signal, options.signal])
+    const nativeTimeout = options.profile.timeoutSignal === "native";
+    const timeoutSignal = nativeTimeout
+      ? AbortSignal.timeout(TIMEOUT_MS)
       : controller.signal;
-    const timer = setTimeout(
-      () =>
-        controller.abort(new DOMException("Request timed out", "TimeoutError")),
-      TIMEOUT_MS,
-    );
+    const signal = options.signal
+      ? AbortSignal.any([timeoutSignal, options.signal])
+      : timeoutSignal;
+    const timeout = () =>
+      options.profile.timeoutReason === "abort-error"
+        ? controller.abort()
+        : controller.abort(
+            new DOMException("Request timed out", "TimeoutError"),
+          );
+    const abortError = () =>
+      options.profile.abortFailure === "retryable-http"
+        ? new ConnectorError("http_error", true)
+        : signal.reason;
+    const timer = nativeTimeout ? undefined : setTimeout(timeout, TIMEOUT_MS);
+    const beforeDispose = () => {
+      if (options.profile.cleanupAbort === "before-body") controller.abort();
+    };
+    const normalizeFailure = (error: unknown) =>
+      safeError(
+        error,
+        isTimeoutError(error, signal, options.profile.abortRetryable),
+      );
     let status: number | undefined;
     let failure: ConnectorError | undefined;
     let response: Response | undefined;
@@ -234,11 +252,13 @@ export function createConnectorRuntime(
       if (!Number.isFinite(wallStart) || !Number.isFinite(monoStart))
         throw new ConnectorError("schema_changed");
       const deadline = () => {
-        if (!signal.aborted && monotonicNow() - monoStart >= TIMEOUT_MS)
-          controller.abort(
-            new DOMException("Request timed out", "TimeoutError"),
-          );
-        if (signal.aborted) throw signal.reason;
+        if (
+          !nativeTimeout &&
+          !signal.aborted &&
+          monotonicNow() - monoStart >= TIMEOUT_MS
+        )
+          timeout();
+        if (signal.aborted) throw abortError();
       };
       const receivedAt = () =>
         new Date(
@@ -266,7 +286,7 @@ export function createConnectorRuntime(
           () => {},
         )
         .catch(() => {});
-      response = await bounded(fetching, signal);
+      response = await bounded(fetching, signal, abortError);
       if (!(response instanceof Response))
         throw new ConnectorError("schema_changed");
       status = response.status;
@@ -276,7 +296,15 @@ export function createConnectorRuntime(
         response,
         request,
         options.profile,
-        { now: options.now, receivedAt, deadline, signal },
+        {
+          now: options.now,
+          receivedAt,
+          deadline,
+          signal,
+          abortError,
+          beforeDispose,
+          normalizeFailure,
+        },
         new Date(wallStart).toISOString(),
       );
       if (
@@ -296,16 +324,15 @@ export function createConnectorRuntime(
       }
       return result;
     } catch (error) {
-      failure = safeError(
-        error,
-        isTimeoutError(error, signal, options.profile.abortRetryable),
-      );
+      failure = normalizeFailure(error);
       throw failure;
     } finally {
+      beforeDispose();
       if (response instanceof Response)
         await response.body?.cancel().catch(() => {});
       clearTimeout(timer);
-      controller.abort();
+      if ((options.profile.cleanupAbort ?? "after-body") === "after-body")
+        controller.abort();
       if (options.leaseScope === "per_request")
         await releaseRequest(
           ticket,

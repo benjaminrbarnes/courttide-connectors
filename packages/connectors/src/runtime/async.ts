@@ -1,11 +1,12 @@
 export function bounded<T>(
   operation: Promise<T>,
   signal: AbortSignal,
+  abortError: () => unknown = () => signal.reason,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const abort = () => {
       cleanup();
-      reject(signal.reason);
+      reject(abortError());
     };
     const cleanup = () => signal.removeEventListener("abort", abort);
     if (signal.aborted) return abort();

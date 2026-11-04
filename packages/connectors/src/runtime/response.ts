@@ -15,6 +15,9 @@ export interface ResponseClock {
   receivedAt(): string;
   deadline(): void;
   signal: AbortSignal;
+  abortError?: () => unknown;
+  beforeDispose?: () => void;
+  normalizeFailure?: (error: unknown) => unknown;
 }
 
 function checkStatus(
@@ -114,7 +117,7 @@ export async function processResponse(
     const chunks: Uint8Array[] = [];
     let size = 0;
     while (reader) {
-      const part = await bounded(reader.read(), clock.signal);
+      const part = await bounded(reader.read(), clock.signal, clock.abortError);
       clock.deadline();
       if (part.done) break;
       if (!(part.value instanceof Uint8Array))
@@ -173,7 +176,10 @@ export async function processResponse(
       requestedAt,
       receivedAt,
     };
+  } catch (error) {
+    throw clock.normalizeFailure ? clock.normalizeFailure(error) : error;
   } finally {
+    clock.beforeDispose?.();
     try {
       if (reader) await reader.cancel();
       else await response.body?.cancel();

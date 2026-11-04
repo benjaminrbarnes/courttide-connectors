@@ -201,6 +201,10 @@ export interface TransportProfile {
   headerNames: "preserve" | "lowercase";
   fetchInput: "url" | "string";
   abortRetryable: "timeout-only" | "any-abort";
+  timeoutSignal?: "controller" | "native";
+  timeoutReason?: "timeout-error" | "abort-error";
+  abortFailure?: "reason" | "retryable-http";
+  cleanupAbort?: "before-body" | "after-body" | "none";
   redirectHeaders: readonly string[];
   contentLengthChecks: boolean;
   jsonContentTypes: readonly string[];
