@@ -13,6 +13,7 @@ import type {
   TenantConfig,
 } from "../contract/types.js";
 import { validateCourtReading } from "../contract/validation.js";
+import { createConnectorRuntime } from "../runtime/http.js";
 import { createFakeFetch, createRecordingGate, frozenClock } from "./fakes.js";
 import type { FakeResponse, GateDeferral } from "./fakes.js";
 import { assertCaseMatrix } from "./matrix.js";
@@ -49,7 +50,7 @@ export interface ConformanceHarness {
   execute<T>(operation: () => Promise<T>): Promise<T>;
 }
 export interface ConformanceOptions {
-  createHarness(
+  createHarness?(
     args: HarnessArguments,
   ): ConformanceHarness | Promise<ConformanceHarness>;
   inapplicableCases?: Readonly<Record<string, string>>;
@@ -91,10 +92,8 @@ function errorDetails(error: unknown): Record<string, unknown> {
 export async function runConformance(
   platform: Platform,
   fixturesDir: string,
-  options: ConformanceOptions,
+  options: ConformanceOptions = {},
 ): Promise<ConformanceResult> {
-  if (!options?.createHarness)
-    throw new Error("Conformance requires an injected runtime harness");
   const directories = readdirSync(fixturesDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => join(fixturesDir, entry.name))
@@ -116,16 +115,27 @@ export async function runConformance(
       meta.gateDeferral as GateDeferral | undefined,
     );
     const now = frozenClock(meta.clockNow);
-    const harness = await options.createHarness({
+    const capabilities = CapabilitiesSchema.parse(
+      platform.capabilities(tenant),
+    );
+    const argumentsForHarness = {
       platform,
       tenant,
       fetch: fake.fetch,
       gate: recording.gate,
       now,
-    });
-    const capabilities = CapabilitiesSchema.parse(
-      platform.capabilities(tenant),
-    );
+    };
+    const harness = options.createHarness
+      ? await options.createHarness(argumentsForHarness)
+      : createConnectorRuntime({
+          tenant,
+          profile: platform.transport,
+          leaseScope: capabilities.leaseScope,
+          fetch: fake.fetch,
+          gate: recording.gate,
+          now,
+          monotonicNow: () => 0,
+        });
     let actual: unknown;
     let thrown: unknown;
     try {

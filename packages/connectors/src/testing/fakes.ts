@@ -9,8 +9,9 @@ import type {
 
 export interface FakeResponse {
   status?: number;
-  headers?: Record<string, string>;
+  headers?: HeadersInit;
   body?: string | null;
+  bodyBytes?: number[];
   redirected?: boolean;
   failure?: "timeout" | "network";
   bodyFailure?: "timeout" | "network";
@@ -67,13 +68,27 @@ export function createFakeFetch(responses: readonly FakeResponse[]): FakeFetch {
     const response = responses[next++];
     if (!response) throw new Error("Unexpected synthetic request");
     if (response.failure) throw failure(response.failure);
+    if (
+      [response.body, response.bodyBytes, response.bodyFailure].filter(
+        (value) => value !== undefined,
+      ).length > 1
+    )
+      throw new Error("Synthetic response has multiple body forms");
+    if (
+      response.bodyBytes?.some(
+        (byte) => !Number.isInteger(byte) || byte < 0 || byte > 255,
+      )
+    )
+      throw new Error("Invalid synthetic response bytes");
     const body = response.bodyFailure
       ? new ReadableStream({
           start(controller) {
             controller.error(failure(response.bodyFailure!));
           },
         })
-      : (response.body ?? null);
+      : response.bodyBytes !== undefined
+        ? new Uint8Array(response.bodyBytes)
+        : (response.body ?? null);
     const result = new Response(body, {
       status: response.status ?? 200,
       headers: response.headers,

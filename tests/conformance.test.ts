@@ -47,6 +47,10 @@ const capabilities = {
 const transport: TransportProfile = {
   retryAfter: "strict-imf",
   successStatuses: "any-2xx",
+  classificationOrder: "headers-first",
+  headerNames: "preserve",
+  fetchInput: "url",
+  abortRetryable: "timeout-only",
   redirectHeaders: [],
   readBodyOnlyOnSuccess: true,
   contentLengthChecks: false,
@@ -219,6 +223,20 @@ describe("conformance kit", () => {
         inapplicableCases: notApplicable,
       }),
     ).rejects.toThrow("requests");
+  });
+
+  it("runs the same synthetic fixture through the default runtime", async () => {
+    const root = mkdtempSync(join(tmpdir(), "connector-fixture-"));
+    roots.push(root);
+    const directory = writeFixture(root);
+    const requests = JSON.parse(
+      readFileSync(join(directory, "requests.json"), "utf8"),
+    );
+    requests[0].init.signal = "present";
+    writeFileSync(join(directory, "requests.json"), JSON.stringify(requests));
+    await expect(
+      runConformance(toy, root, { inapplicableCases: notApplicable }),
+    ).resolves.toEqual({ fixtures: 1, cases: ["open_interval"] });
   });
 
   it("checks deferred acquisition through the fixture runner without a release", async () => {
@@ -441,6 +459,26 @@ describe("conformance kit", () => {
       (await fake.fetch("https://example.invalid/")).text(),
     ).rejects.toThrow();
     expect(fake.remaining()).toBe(0);
+  });
+
+  it("replays repeated response headers and exact binary body bytes", async () => {
+    const fake = createFakeFetch([
+      {
+        headers: [
+          ["set-cookie", "ExampleSession=example-token; Path=/"],
+          ["set-cookie", "ExampleOther=two; Path=/"],
+        ],
+        bodyBytes: [0xc3, 0x28],
+      },
+    ]);
+    const response = await fake.fetch("http://localhost:3000/");
+    expect(response.headers.getSetCookie()).toEqual([
+      "ExampleSession=example-token; Path=/",
+      "ExampleOther=two; Path=/",
+    ]);
+    expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([
+      0xc3, 0x28,
+    ]);
   });
 
   it("requires every case or an explicit reason", () => {

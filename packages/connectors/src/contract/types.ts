@@ -187,23 +187,35 @@ export interface HeaderRule {
 }
 export interface CookieJarProfile {
   cookieDomains: readonly string[];
-  maxCookies: number;
-  maxBytes: number;
-  rejectPartitioned: boolean;
-  enforceSecurePrefixes: boolean;
+  maxCookies: 16;
+  maxBytes: 16384;
+  rejectPartitioned: true;
+  enforceSecurePrefixes: true;
   pathFor(request: HttpRequest): string;
 }
 export interface TransportProfile {
   retryAfter: "strict-imf" | "lenient";
   successStatuses: "any-2xx" | "200-only";
+  classificationOrder: "headers-first" | "legacy-body-first";
+  headerNames: "preserve" | "lowercase";
+  fetchInput: "url" | "string";
+  abortRetryable: "timeout-only" | "any-abort";
   redirectHeaders: readonly string[];
   readBodyOnlyOnSuccess: boolean;
   contentLengthChecks: boolean;
   jsonContentTypes: readonly string[];
   htmlContentTypes: readonly string[];
-  challenge: { passiveAssets: readonly string[] } | null;
+  challenge: {
+    passiveAssets: readonly string[];
+    scope: "html-or-leading" | "all";
+  } | null;
   headers: Readonly<Record<string, HeaderRule>>;
-  urlGrammar: Partial<Record<RequestMethod, (url: URL) => boolean>>;
+  urlGrammar: Partial<
+    Record<
+      RequestMethod,
+      (url: URL, tenant: TenantConfig, purpose: RequestPurpose) => boolean
+    >
+  >;
   cookieJar: CookieJarProfile | null;
   classify?: (body: unknown, request: HttpRequest) => void | Promise<void>;
 }

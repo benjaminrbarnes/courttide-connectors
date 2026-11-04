@@ -4,7 +4,7 @@
   "platform": "civicrec",
   "tenant": "XX/example-city",
   "timeZone": "UTC",
-  "origin": "https://example.invalid",
+  "origin": "https://secure.rec1.com",
   "params": { "catalogPath": "/XX/example-city/catalog", "locationId": 900002 },
   "parks": [
     {
