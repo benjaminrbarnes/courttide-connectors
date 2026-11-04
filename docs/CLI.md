@@ -43,7 +43,7 @@ requires an explicit live flag and one court key. The span is limited to the
 platform's `maxDaysPerRead`. Text output shows each date's status, visibility,
 coverage, usability and open windows, followed by the CourtTide credit line.
 JSON output goes to standard output and sends that credit line to standard
-error. Use CourtTide's public MCP for multi-park reads.
+error. CourtTide's public MCP is planned for multi-park reads.
 
 `serve <fixture-dir>` binds only to `127.0.0.1`. Pass one fixture case directory
 to avoid ambiguous routes. It serves synthetic request/response pairs and does
@@ -53,24 +53,29 @@ not contact a provider.
 outputs, requests and gate calls.
 
 `record <platform> --config <file> --court <key> --date YYYY-MM-DD --live --case <name>`
-currently supports ActiveNet. It captures one bounded successful response in
-memory, rebuilds the response from the adapter's normalized payload, verifies
-the result against the complete synthetic conformance suite, then writes a
-`meta.json`, `requests.json`, `responses.json`, `gate.json` and `expected.json`
-fixture below the git-ignored `local/recordings/` directory. If replay differs,
-the recording is removed. The recorded response body is rebuilt; the original
-body is never written. Recording refuses to write if the destination is not
-ignored or resolves into `fixtures/`. CivicRec recording remains unavailable
-until bootstrap secret replacement can be replay-verified.
+captures one bounded successful ActiveNet response or a bounded CivicRec
+bootstrap/calendar pair. It writes a `meta.json`, `requests.json`,
+`responses.json`, `gate.json` and `expected.json` fixture below the git-ignored
+`local/recordings/` directory only after replaying the fixture with the complete
+synthetic conformance suite and confirming exact reading equality. ActiveNet
+responses are rebuilt from adapter-normalized details while preserving the
+captured success code. CivicRec transient bootstrap keys and cookie values are
+replaced with synthetic values in the response, follow-up URL and request
+header; calendar payloads retain only parser-relevant bounded fields, with
+free-text and unknown fields removed. Each fixture records its redactions and
+synthetic replacements. If replay differs, nothing is written to the final
+recording path. Recording refuses to write if the destination is not ignored or
+resolves into `fixtures/`.
 
 `check [paths...]` validates JSON tenant configs, runs available platform
 conformance fixtures and the repository data guard. With no paths, it checks
 `examples/tenants/`.
 
-`test:live --config <dir> [--platform <id>] [--courts <key,...>]` runs bounded
-integration reads using the current date in each config's time zone. It refuses
-to run in CI, stops after the first blocked or inconclusive result, prints only
-aggregate counts plus the CourtTide credit line, and writes those counts to
+`test:live --config <dir> [--platform <id>] [--courts <key,...>] [--date YYYY-MM-DD] [--days N]`
+runs bounded integration reads using the current date in each config's time
+zone unless a date is selected. It refuses
+to run in CI, stops after the first failure, caps `--days` at the platform
+maximum, prints only aggregate counts plus the CourtTide credit line, and writes those counts to
 git-ignored `local/live-report.json`. Exit codes are 0 for a pass, 1 for a
 parse/schema regression, 2 for an inconclusive response or transport failure,
 and 3 for a blocked run. Specify `--base-url` with a loopback fixture server to

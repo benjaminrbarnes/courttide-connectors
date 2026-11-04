@@ -160,7 +160,9 @@ describe("connector CLI", () => {
       output.value,
     );
     expect(multi).toBe(1);
-    expect(output.err.join("\n")).toContain("public MCP for many parks");
+    expect(output.err.join("\n")).toContain(
+      "public MCP for many parks is planned",
+    );
     const unsafe = await runCli(
       [
         "read",
@@ -293,7 +295,135 @@ describe("connector CLI", () => {
     }
   });
 
-  it("refuses to follow a local directory symlink into fixtures", () => {
+  it("rejects an unsafe recording target before any HTTP request", async () => {
+    const output = io();
+    let fetchCalls = 0;
+    const status = await runCli(
+      [
+        "record",
+        "activenet",
+        "--config",
+        config,
+        "--court",
+        "900001",
+        "--date",
+        "2026-10-31",
+        "--live",
+        "--case",
+        "../fixtures/unsafe",
+        "--base-url",
+        "http://127.0.0.1:3000",
+      ],
+      {
+        ...output.value,
+        fetch: async () => {
+          fetchCalls++;
+          throw new Error("unexpected HTTP request");
+        },
+      },
+    );
+    expect(status).toBe(1);
+    expect(output.err.join("; ")).toMatch(/case name/);
+    expect(fetchCalls).toBe(0);
+  });
+
+  it("records CivicRec with synthetic bootstrap secrets and verified calendar replay", async () => {
+    const source = resolve(root, "platforms/civicrec/fixtures/open");
+    const server = await startFixtureServer(source);
+    try {
+      const output = io();
+      const status = await runCli(
+        [
+          "record",
+          "civicrec",
+          "--config",
+          "examples/tenants/civicrec.json",
+          "--court",
+          "900003",
+          "--date",
+          "2026-11-04",
+          "--live",
+          "--case",
+          "cli-test-record",
+          "--base-url",
+          server.url,
+        ],
+        {
+          ...output.value,
+          now: () => new Date(),
+        },
+      );
+      expect(status, output.err.join("; ")).toBe(0);
+      const meta = JSON.parse(
+        readFileSync(join(recordDir, "meta.json"), "utf8"),
+      );
+      expect(meta.source).toBe("recorded");
+      expect(meta.secrets).toContain("synthetic-session-key");
+      expect(meta.redactions).toHaveLength(5);
+      const requestLog = JSON.parse(
+        readFileSync(join(recordDir, "requests.json"), "utf8"),
+      );
+      expect(requestLog).toHaveLength(2);
+      expect(requestLog[1].url).toContain("synthetic-session-key");
+      expect(requestLog[1].init.headers.cookie).toContain(
+        "synthetic-session-cookie-",
+      );
+      const responses = JSON.parse(
+        readFileSync(join(recordDir, "responses.json"), "utf8"),
+      );
+      expect(responses[0].body).toContain("synthetic-session-key");
+      expect(responses[0].headers[1][1]).toContain("synthetic-session-cookie-");
+      const calendar = JSON.parse(responses[1].body);
+      expect(calendar.hours[0]).not.toHaveProperty("description");
+      expect(calendar).not.toHaveProperty("info");
+      const allFixtureText = [
+        "meta.json",
+        "requests.json",
+        "responses.json",
+        "gate.json",
+        "expected.json",
+      ]
+        .map((file) => readFileSync(join(recordDir, file), "utf8"))
+        .join("\n");
+      expect(allFixtureText).not.toContain("example-session");
+      expect(allFixtureText).not.toContain("example-token");
+
+      const replay = io();
+      expect(await runCli(["replay", recordDir], replay.value)).toBe(0);
+
+      const routes = requestLog.map((request: { url: string }) => {
+        const url = new URL(request.url);
+        return `${url.pathname}${url.search}`;
+      });
+      const served: string[] = [];
+      const outputServe = io();
+      expect(
+        await runCli(["serve", recordDir], {
+          ...outputServe.value,
+          onServe: async (url, close) => {
+            try {
+              const first = await fetch(`${url}${routes[0]}`);
+              served.push(await first.text());
+              const second = await fetch(`${url}${routes[1]}`, {
+                headers: requestLog[1].init.headers,
+              });
+              served.push(await second.text());
+              expect(first.status).toBe(200);
+              expect(second.status).toBe(200);
+            } finally {
+              await close();
+            }
+          },
+        }),
+      ).toBe(0);
+      expect(served[0]).toContain("synthetic-session-key");
+      expect(served[1]).toContain("displayHours");
+    } finally {
+      await server.close();
+    }
+  }, 20_000);
+
+  it("refuses to follow a local directory symlink into fixtures", async () => {
     const temporary = mkdtempSync(join(tmpdir(), "connectors-cli-record-"));
     const fixtures = join(temporary, "fixtures");
     mkdirSync(fixtures);
@@ -321,7 +451,7 @@ describe("connector CLI", () => {
       },
     } as unknown as ReadResult;
     try {
-      expect(() =>
+      await expect(
         writeRecording(
           temporary,
           "symlinked-output",
@@ -329,50 +459,34 @@ describe("connector CLI", () => {
           new Date(),
           "tenant.json",
         ),
-      ).toThrow(/regular local/);
+      ).rejects.toThrow(/regular local/);
       expect(readdirSync(fixtures)).toEqual([]);
     } finally {
       rmSync(temporary, { recursive: true, force: true });
     }
   });
 
-  it("refuses to follow a local directory symlink into fixtures", () => {
-    const temporary = mkdtempSync(join(tmpdir(), "connectors-cli-record-"));
+  it("rejects nested local symlinks before creating any recording paths", async () => {
+    const temporary = mkdtempSync(
+      join(tmpdir(), "connectors-cli-nested-link-"),
+    );
     const fixtures = join(temporary, "fixtures");
+    const local = join(temporary, "local");
     mkdirSync(fixtures);
+    mkdirSync(local);
     writeFileSync(join(temporary, ".gitignore"), "local/\n");
     execFileSync("git", ["init", "--quiet"], { cwd: temporary });
-    symlinkSync("fixtures", join(temporary, "local"), "dir");
-    const result = {
-      requestLog: [],
-      gateLog: [],
-      reading: {
-        platform: "activenet",
-        tenant: "exampleparks",
-        court: "900001",
-        startDate: "2026-01-02",
-        endDate: "2026-01-02",
-        complete: true,
-        observedAt: "2026-01-02T12:00:00.000Z",
-        days: [],
-        sanitized: {},
-        parser: { id: "synthetic", version: "1", signature: "test" },
-        attribution: {
-          text: "Read with courttide-connectors by CourtTide",
-          url: "https://courttide.com",
-        },
-      },
-    } as unknown as ReadResult;
+    symlinkSync("../fixtures", join(local, "recordings"), "dir");
     try {
-      expect(() =>
+      await expect(
         writeRecording(
           temporary,
-          "symlinked-output",
-          result,
+          "nested-link-output",
+          {} as ReadResult,
           new Date(),
           "tenant.json",
         ),
-      ).toThrow(/regular local/);
+      ).rejects.toThrow(/symbolic link/);
       expect(readdirSync(fixtures)).toEqual([]);
     } finally {
       rmSync(temporary, { recursive: true, force: true });
@@ -437,6 +551,10 @@ describe("connector CLI", () => {
           "activenet",
           "--courts",
           "900001",
+          "--date",
+          "2026-10-31",
+          "--days",
+          "1",
           "--base-url",
           server.url,
         ],
@@ -495,14 +613,14 @@ describe("connector CLI", () => {
             "activenet",
             "--courts",
             "900001",
+            "--date",
+            "2026-01-02",
+            "--days",
+            "1",
             "--base-url",
             server.url,
           ],
-          {
-            ...output.value,
-            ci: false,
-            now: () => new Date("2026-01-02T12:00:00.000Z"),
-          },
+          { ...output.value, ci: false },
         );
         expect(status).toBe(scenario.expected);
         expect(output.out.join("\n")).toContain(scenario.count);

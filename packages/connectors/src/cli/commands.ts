@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { Temporal } from "@js-temporal/polyfill";
 import { TenantConfigSchema } from "../contract/schemas.js";
 import { validateCourtReading } from "../contract/validation.js";
 import type { Platform, TenantConfig } from "../contract/types.js";
+import { parseLocalDate } from "../runtime/temporal.js";
 import { parseArgs, singleOption } from "./args.js";
 import { configFiles, loadConfig, validatePlatformConfig } from "./config.js";
 import { replayFixtures, startFixtureServer } from "./fixtures.js";
@@ -14,7 +15,11 @@ import {
   parseReadOptions,
   readCourt,
 } from "./read.js";
-import { writeLiveReport, writeRecording } from "./record.js";
+import {
+  preflightRecordingDestination,
+  writeLiveReport,
+  writeRecording,
+} from "./record.js";
 import { conformanceFixturePath, listPlatforms } from "./registry.js";
 import { CliExit, type CliIO, type ReadOptions } from "./types.js";
 
@@ -29,7 +34,7 @@ function usage(): string {
     "  courttide-connectors replay <fixture-dir>",
     "  courttide-connectors record <platform> --config <file> --court <key> --date YYYY-MM-DD --live --case <name>",
     "  courttide-connectors check [paths...]",
-    "  courttide-connectors test:live --config <dir> [--platform <id>] [--courts <key,...>]",
+    "  courttide-connectors test:live --config <dir> [--platform <id>] [--courts <key,...>] [--date YYYY-MM-DD] [--days N]",
     "  courttide-connectors list",
   ].join("\n");
 }
@@ -75,28 +80,17 @@ async function commandRecord(
   );
   const options = parseReadOptions(parsed);
   const name = singleOption(parsed.values, "case", true)!;
-  if (options.platform !== "activenet")
-    throw new Error(
-      "record currently supports ActiveNet only; CivicRec bootstrap secret replacement verification is not yet available",
-    );
+  preflightRecordingDestination(io.cwd, name);
   const execution = createCliGate(10_000);
   execution.captureResponses = true;
   const result = await readCourt(options, io, execution);
-  const path = writeRecording(
+  const path = await writeRecording(
     io.cwd,
     name,
     result,
     io.now?.() ?? new Date(),
     options.config,
   );
-  try {
-    await replayFixtures(path);
-  } catch (error) {
-    rmSync(path, { recursive: true, force: true });
-    throw new Error(
-      `Recording failed offline parity verification: ${error instanceof Error ? error.message : "fixture mismatch"}`,
-    );
-  }
   io.stdout(`Verified local recording written: ${path}`);
 }
 
@@ -197,7 +191,14 @@ async function commandTestLive(
   args: readonly string[],
   io: CliIO,
 ): Promise<void> {
-  const parsed = parseArgs(args, ["config", "platform", "courts", "base-url"]);
+  const parsed = parseArgs(args, [
+    "config",
+    "platform",
+    "courts",
+    "base-url",
+    "date",
+    "days",
+  ]);
   if (parsed.positional.length)
     throw new Error("test:live accepts only options");
   if (io.ci ?? Boolean(process.env.CI)) {
@@ -219,6 +220,16 @@ async function commandTestLive(
     throw new Error("--courts must contain unique court keys");
   const baseUrl = singleOption(parsed.values, "base-url");
   if (baseUrl) new URL(baseUrl);
+  const dateOption = singleOption(parsed.values, "date");
+  const selectedDate = dateOption
+    ? parseLocalDate(dateOption).toString()
+    : undefined;
+  const daysText = singleOption(parsed.values, "days");
+  if (daysText !== undefined && !/^\d+$/.test(daysText))
+    throw new Error("--days must be a positive integer");
+  const requestedDays = daysText === undefined ? 1 : Number(daysText);
+  if (!Number.isSafeInteger(requestedDays) || requestedDays < 1)
+    throw new Error("--days must be a positive integer");
   const files = configFiles(configPath, io.cwd);
   if (!files.length) throw new Error("No tenant configs found");
   const targets: {
@@ -250,8 +261,10 @@ async function commandTestLive(
           platform: tenant.platform,
           config: file,
           court,
-          date: localDate(io.now?.() ?? new Date(), tenant.timeZone),
-          days: Math.min(1, capabilities.maxDaysPerRead),
+          date:
+            selectedDate ??
+            localDate(io.now?.() ?? new Date(), tenant.timeZone),
+          days: Math.min(requestedDays, capabilities.maxDaysPerRead),
           json: false,
           ...(baseUrl ? { baseUrl } : {}),
         },

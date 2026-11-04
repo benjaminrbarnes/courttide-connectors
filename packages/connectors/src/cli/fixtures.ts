@@ -20,7 +20,7 @@ import { conformanceFixturePath } from "./registry.js";
 
 interface FixtureResponse {
   status?: number;
-  headers?: Record<string, string>;
+  headers?: Record<string, string | string[]>;
   body?: string | null;
 }
 
@@ -56,7 +56,7 @@ function requestPath(value: unknown): string {
   return `${url.pathname}${url.search}`;
 }
 
-function responseHeaders(value: unknown): Record<string, string> {
+function responseHeaders(value: unknown): Record<string, string | string[]> {
   if (!value || typeof value !== "object") return {};
   const allowed = new Set([
     "content-type",
@@ -65,7 +65,7 @@ function responseHeaders(value: unknown): Record<string, string> {
     "location",
     "refresh",
   ]);
-  const result: Record<string, string> = {};
+  const result: Record<string, string | string[]> = {};
   const pairs = Array.isArray(value)
     ? value.filter(
         (entry): entry is [string, string] =>
@@ -75,8 +75,16 @@ function responseHeaders(value: unknown): Record<string, string> {
       )
     : Object.entries(value);
   for (const [key, item] of pairs) {
-    if (allowed.has(key.toLowerCase()) && typeof item === "string")
-      result[key.toLowerCase()] = item;
+    if (allowed.has(key.toLowerCase()) && typeof item === "string") {
+      const normalized = key.toLowerCase();
+      if (normalized === "set-cookie") {
+        const previous = result[normalized];
+        result[normalized] = [
+          ...(Array.isArray(previous) ? previous : previous ? [previous] : []),
+          item,
+        ];
+      } else result[normalized] = item;
+    }
   }
   return result;
 }

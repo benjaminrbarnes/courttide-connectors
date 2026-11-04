@@ -97,9 +97,15 @@ function makeFetch(
     const rawHeaders = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     );
+    const loggedHeaders =
+      init?.headers &&
+      typeof init.headers === "object" &&
+      !Array.isArray(init.headers)
+        ? { ...(init.headers as Record<string, string>) }
+        : Object.fromEntries(rawHeaders.entries());
     const loggedInit: Record<string, unknown> = {
       method: method.toUpperCase(),
-      headers: Object.fromEntries(rawHeaders.entries()),
+      headers: loggedHeaders,
       credentials: init?.credentials ?? "omit",
       redirect: init?.redirect ?? "manual",
       cache: init?.cache ?? "no-store",
@@ -163,14 +169,14 @@ export function parseReadOptions(parsed: ParsedArgs): ReadOptions {
     );
   if ((parsed.values.get("court") ?? []).length > 1)
     throw new Error(
-      "read accepts one court only; use CourtTide's public MCP for many parks",
+      "read accepts one court only; CourtTide's public MCP for many parks is planned",
     );
   const platform = parsed.positional[0]!;
   const config = singleOption(parsed.values, "config", true)!;
   const court = singleOption(parsed.values, "court", true)!;
   if (court.includes(","))
     throw new Error(
-      "read accepts one court only; use CourtTide's public MCP for many parks",
+      "read accepts one court only; CourtTide's public MCP for many parks is planned",
     );
   const date = singleOption(parsed.values, "date", true)!;
   const daysText = singleOption(parsed.values, "days");
