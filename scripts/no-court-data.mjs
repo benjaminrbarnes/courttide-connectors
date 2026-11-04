@@ -168,18 +168,35 @@ function inspectJson(value, path, findings) {
   }
 }
 
-function isInternalHost(hostname) {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+function isInternalIpv4(first, second) {
+  return (
+    first === 0 ||
+    first === 10 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
+export function isInternalHost(hostname) {
+  const host = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host === "::1")
+    return false;
   if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
     host.endsWith(".internal") ||
     host.endsWith(".local") ||
     host.endsWith([".up", "railway", "app"].join("."))
   )
     return true;
-  if (host === "::1" || /^(?:fc|fd|fe[89ab])[0-9a-f]*:/i.test(host))
-    return true;
+  if (host === "::" || /^(?:fc|fd|fe[89ab])[0-9a-f]*:/i.test(host)) return true;
+  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(host);
+  if (mapped) {
+    const high = Number.parseInt(mapped[1], 16);
+    return isInternalIpv4(high >> 8, high & 0xff);
+  }
   const parts = host.split(".");
   if (
     parts.length !== 4 ||
@@ -187,14 +204,7 @@ function isInternalHost(hostname) {
   )
     return false;
   const [first, second] = parts.map(Number);
-  return (
-    first === 0 ||
-    first === 10 ||
-    first === 127 ||
-    (first === 169 && second === 254) ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 168)
-  );
+  return isInternalIpv4(first, second);
 }
 
 function decodedPathParts(url, findings) {

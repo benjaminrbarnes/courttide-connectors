@@ -234,6 +234,19 @@ describe("contract schemas", () => {
     expect(CourtReadingSchema.safeParse(overlap).success).toBe(true);
   });
 
+  it("never labels reported-only ranges as complete, even when unusable", () => {
+    const value = reading();
+    value.complete = false;
+    value.days[0]!.usable = false;
+    value.days[0]!.intervals = [];
+    const context = { ...fullContext, shape: "continuous_ranges" as const };
+    expect(readingSchema(context).safeParse(value).success).toBe(false);
+    value.days[0]!.coverage = "invalid";
+    expect(readingSchema(context).safeParse(value).success).toBe(true);
+    value.days[0]!.coverage = "partial";
+    expect(readingSchema(context).safeParse(value).success).toBe(true);
+  });
+
   it("rejects marked-secret echoes, oversize data and malformed timestamps without throwing", () => {
     const value = reading();
     value.sanitized = { value: "example-token" };

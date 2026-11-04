@@ -3,7 +3,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { inspectText, scanRepository } from "../scripts/no-court-data.mjs";
+import {
+  inspectText,
+  isInternalHost,
+  scanRepository,
+} from "../scripts/no-court-data.mjs";
 
 const temporary = [];
 afterEach(() => {
@@ -185,10 +189,30 @@ describe("repository data check", () => {
     expect(inspectText("docs/sample.md", String(otherUrl))).toContain(
       "non-example identifier",
     );
-    const localHost = [127, 0, 0, 1].join(".");
-    expect(
-      inspectText("docs/sample.md", ["http:", "", localHost].join("/")),
-    ).toContain("internal URL");
+  });
+
+  it("allows generic loopback URLs and still blocks private hosts", () => {
+    for (const url of [
+      "http://localhost:3000/",
+      "http://127.0.0.1:3000/",
+      "http://127.42.0.2:3000/",
+      "http://[::1]:3000/",
+      "http://[::ffff:127.0.0.1]:3000/",
+    ]) {
+      expect(inspectText("docs/sample.md", url)).not.toContain("internal URL");
+    }
+    for (const host of [
+      "example.internal",
+      "example.up.railway.app",
+      "10.0.0.42",
+      "172.16.0.42",
+      "172.31.0.42",
+      "192.168.1.42",
+      "169.254.0.42",
+      "::ffff:0a00:2a",
+    ]) {
+      expect(isInternalHost(host)).toBe(true);
+    }
   });
 
   it("finds private references without embedding them as text", () => {

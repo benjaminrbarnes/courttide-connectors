@@ -59,13 +59,14 @@ export function readingSchema(context: ReadingContext) {
       }
       if (
         context.shape === "continuous_ranges" &&
-        day.usable &&
-        (day.coverage !== "partial" || !day.evidence)
+        (day.coverage === "complete" ||
+          (day.usable && (day.coverage !== "partial" || !day.evidence)))
       ) {
         ctx.addIssue({
           code: "custom",
           path: ["days", dayIndex],
-          message: "Usable ranges require partial coverage and evidence",
+          message:
+            "Reported ranges cannot have complete coverage; usable ranges require evidence",
         });
       }
       let midnight: Temporal.Instant;

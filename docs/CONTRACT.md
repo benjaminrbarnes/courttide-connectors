@@ -183,7 +183,8 @@ success and JSON content type.
 explicit `available: false` intervals. A visible partial full-calendar day is
 unusable; any retained interval flags are source evidence, not an availability
 result. `continuous_ranges` reports open ranges only: a usable day has partial
-coverage, reported-only evidence and only `available: true` intervals; it never
+coverage, reported-only evidence and only `available: true` intervals. A
+reported-range day never has complete coverage, even when unusable, and never
 has `available: false`. Absence is not a booking. Offered fixed-duration
 starts and reservation-only calendars are not v1 shapes; a reservation-only
 source is unusable with `reported_reservations_only`.
