@@ -60,6 +60,12 @@ export class CivicRecReader {
         expect: "html",
       }),
     );
+    const type = response.headers
+      .get("content-type")
+      ?.split(";")[0]
+      ?.trim()
+      .toLowerCase();
+    if (type !== "text/html") throw new ConnectorError("access_blocked");
     return parseAnonymousBootstrap({
       html: response.text,
       headers: response.headers,

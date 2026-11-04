@@ -205,6 +205,7 @@ export interface TransportProfile {
   contentLengthChecks: boolean;
   jsonContentTypes: readonly string[];
   htmlContentTypes: readonly string[];
+  classifyJsonForHtml?: boolean;
   challenge: {
     passiveAssets: readonly string[];
     scope: "html-or-leading" | "all";

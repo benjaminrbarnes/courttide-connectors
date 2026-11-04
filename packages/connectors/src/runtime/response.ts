@@ -69,7 +69,7 @@ function checkLength(
 
 function checkType(
   response: Response,
-  request: HttpRequest,
+  expected: HttpRequest["expect"],
   profile: TransportProfile,
 ): void {
   const type = response.headers
@@ -78,9 +78,7 @@ function checkType(
     ?.trim()
     .toLowerCase();
   const allowed =
-    request.expect === "json"
-      ? profile.jsonContentTypes
-      : profile.htmlContentTypes;
+    expected === "json" ? profile.jsonContentTypes : profile.htmlContentTypes;
   if (!type || !allowed.includes(type))
     throw new ConnectorError("access_blocked");
 }
@@ -95,12 +93,21 @@ export async function processResponse(
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
     if (response.redirected) throw new ConnectorError("access_blocked");
+    const rawType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    const classifyJson =
+      request.expect === "json" ||
+      (request.expect === "html" &&
+        profile.classifyJsonForHtml === true &&
+        profile.jsonContentTypes.some(
+          (type) => rawType === type || rawType.startsWith(`${type};`),
+        ));
+    const expected = classifyJson ? "json" : request.expect;
     const bodyFirst =
       profile.classificationOrder === "legacy-body-first" &&
       response.status === 200;
     if (!bodyFirst) checkStatus(response, profile, clock);
     const length = checkLength(response, profile);
-    if (!bodyFirst) checkType(response, request, profile);
+    if (!bodyFirst) checkType(response, expected, profile);
     if (!response.body && !bodyFirst)
       throw new ConnectorError("schema_changed");
     reader = response.body?.getReader();
@@ -138,7 +145,7 @@ export async function processResponse(
     const receivedAt = clock.receivedAt();
     if (bodyFirst) {
       checkStatus(response, profile, clock);
-      checkType(response, request, profile);
+      checkType(response, expected, profile);
     }
     if (request.expect === "json" && /^\s*</.test(text))
       throw new ConnectorError("access_blocked");
@@ -151,7 +158,7 @@ export async function processResponse(
     )
       throw new ConnectorError("access_blocked");
     let body: unknown = text;
-    if (request.expect === "json") {
+    if (classifyJson) {
       try {
         body = JSON.parse(text);
       } catch {

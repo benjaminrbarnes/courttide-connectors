@@ -83,6 +83,50 @@ function harness(responses: FakeResponse[], config = tenant) {
 
 const one = { start: date, end: date };
 describe("CivicRec platform", () => {
+  it("classifies JSON bootstrap content before release and enforces HTML afterward", async () => {
+    for (const [contentType, body, code, releaseError] of [
+      ["application/json", "", "schema_changed", "schema_changed"],
+      ["application/json", "{", "schema_changed", "schema_changed"],
+      ["application/json", "{}", "access_blocked", null],
+      ["text/json; charset=utf-8", "{}", "access_blocked", null],
+      [
+        "application/json",
+        '{"error":"access denied"}',
+        "access_blocked",
+        "access_blocked",
+      ],
+      ["application/json", "<not-json>", "schema_changed", "schema_changed"],
+      [
+        "application/json ;charset=utf-8",
+        "",
+        "access_blocked",
+        "access_blocked",
+      ],
+      ["text/html", "", "schema_changed", null],
+    ] as const) {
+      const h = harness([
+        { status: 200, headers: { "content-type": contentType }, body },
+      ]);
+      await expect(
+        h.runtime.execute(() => h.connector.readCourt("900003", one)),
+      ).rejects.toMatchObject({ code, retryable: false });
+      expect(h.recording.calls).toHaveLength(2);
+      expect(h.recording.calls[1]).toEqual({
+        type: "release",
+        ticket: 1,
+        outcome: releaseError
+          ? {
+              ok: false,
+              status: 200,
+              error: releaseError,
+              retryAfterMs: null,
+              retryable: false,
+            }
+          : { ok: true, status: 200 },
+      });
+    }
+  });
+
   it("reuses bootstrap over a range, keeps explicit overlaps and clamps each open interval", async () => {
     const rows = [
       range(date, "08:00", "10:00"),

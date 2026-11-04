@@ -240,34 +240,75 @@ describe("legacy response classification", () => {
     }
   });
 
-  it("reports timeout and ordinary fetch failures distinctly to a per-request gate", async () => {
-    for (const retryable of [true, false]) {
+  it("marks non-aborted fetch and stream timeout errors non-retryable for the any-abort profile", async () => {
+    for (const kind of ["fetch", "stream", "ordinary"] as const) {
       const recording = createRecordingGate();
       const failure = new Error("example-sensitive");
-      if (retryable) failure.name = "TimeoutError";
+      if (kind !== "ordinary") failure.name = "TimeoutError";
       const client = runtime(
         civicTenant,
         civicRecLegacyProfile,
         recording.gate,
         async () => {
-          throw failure;
+          if (kind !== "stream") throw failure;
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(failure);
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          );
         },
       );
       await expect(
         client.execute(() => client.http.request(civicRequest())),
-      ).rejects.toMatchObject({ code: "http_error", retryable });
+      ).rejects.toMatchObject({ code: "http_error", retryable: false });
       expect(recording.calls).toHaveLength(2);
       expect(recording.calls.at(-1)).toEqual({
         type: "release",
         ticket: 1,
         outcome: {
           ok: false,
+          ...(kind === "stream" ? { status: 200 } : {}),
           error: "http_error",
           retryAfterMs: null,
-          retryable,
+          retryable: false,
         },
       });
     }
+  });
+
+  it("marks an actual signal abort retryable for the any-abort profile", async () => {
+    const recording = createRecordingGate();
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>(() => new Promise(() => {}));
+    const client = runtime(
+      civicTenant,
+      civicRecLegacyProfile,
+      recording.gate,
+      fetcher,
+      {
+        signal: controller.signal,
+      },
+    );
+    const pending = client.execute(() => client.http.request(civicRequest()));
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({
+      code: "http_error",
+      retryable: true,
+    });
+    expect(recording.calls.at(-1)).toEqual({
+      type: "release",
+      ticket: 1,
+      outcome: {
+        ok: false,
+        error: "http_error",
+        retryAfterMs: null,
+        retryable: true,
+      },
+    });
   });
 
   it("sanitizes transport failures and preserves only typed error controls", async () => {

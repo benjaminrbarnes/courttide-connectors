@@ -43,6 +43,7 @@ describe("runtime request and lease behavior", () => {
       contentLengthChecks: true,
       jsonContentTypes: ["application/json", "text/json"],
       htmlContentTypes: ["text/html"],
+      classifyJsonForHtml: true,
       challenge: { scope: "all" },
     });
     const recording = createRecordingGate();
