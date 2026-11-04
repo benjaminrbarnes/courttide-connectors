@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readdirSync,
@@ -10,12 +11,17 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { runCli } from "../../packages/connectors/src/cli/main.js";
+import {
+  isDirectExecution,
+  runCli,
+} from "../../packages/connectors/src/cli/main.js";
 import { startFixtureServer } from "../../packages/connectors/src/cli/fixtures.js";
 import { writeRecording } from "../../packages/connectors/src/cli/record.js";
 import type { ReadResult } from "../../packages/connectors/src/cli/read.js";
 import { sanitizedUrl } from "../../packages/connectors/src/cli/read.js";
+import { listPlatforms } from "../../packages/connectors/src/cli/registry.js";
 
 const root = process.cwd();
 const cases = resolve(root, "examples/activenet/fixtures/cases");
@@ -45,9 +51,25 @@ function fixtureRequest(name: string): { url: string } {
 
 afterEach(() => {
   rmSync(recordDir, { recursive: true, force: true });
+  rmSync(resolve(root, "local/live-report.json"), { force: true });
 });
 
 describe("connector CLI", () => {
+  it("recognizes the executable through an installed bin symlink", () => {
+    const temporary = mkdtempSync(join(tmpdir(), "connectors-cli-bin-"));
+    const target = join(temporary, "main.js");
+    const binDirectory = join(temporary, "node_modules", ".bin");
+    const bin = join(binDirectory, "courttide-connectors");
+    mkdirSync(binDirectory, { recursive: true });
+    writeFileSync(target, "");
+    symlinkSync(target, bin);
+    try {
+      expect(isDirectExecution(pathToFileURL(target).href, bin)).toBe(true);
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
   it("reads one court through the loopback fixture server and prints credit", async () => {
     const server = await startFixtureServer(join(cases, "midnight-end"));
     try {
@@ -68,7 +90,7 @@ describe("connector CLI", () => {
         ],
         { ...output.value },
       );
-      expect(status).toBe(0);
+      expect(status, output.err.join("; ")).toBe(0);
       expect(output.out.join("\n")).toContain("open=");
       expect(output.out.join("\n")).toContain(
         "Read with courttide-connectors by CourtTide · https://courttide.com",
@@ -188,7 +210,7 @@ describe("connector CLI", () => {
         }
       },
     });
-    expect(status).toBe(0);
+    expect(status, output.err.join("; ")).toBe(0);
     expect(output.out[0]).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     expect(responseText).toContain("response_code");
   });
@@ -200,7 +222,7 @@ describe("connector CLI", () => {
     expect(output.out.join("\n")).toContain("Replay passed for activenet");
   });
 
-  it("records a scrubbed local fixture and never writes it into fixtures", async () => {
+  it("records, serves, and replays a scrubbed conformance fixture locally", async () => {
     const server = await startFixtureServer(join(cases, "midnight-end"));
     try {
       const output = io();
@@ -222,19 +244,50 @@ describe("connector CLI", () => {
         ],
         output.value,
       );
-      expect(status).toBe(0);
-      const recording = JSON.parse(
-        readFileSync(join(recordDir, "record.json"), "utf8"),
+      expect(status, output.err.join("; ")).toBe(0);
+      const meta = JSON.parse(
+        readFileSync(join(recordDir, "meta.json"), "utf8"),
       );
-      expect(recording.source).toBe("recorded");
-      expect(recording.requestLog).toHaveLength(1);
-      expect(recording.gateLog).toHaveLength(2);
-      expect(recording.reading.sanitizedPayload).toBeDefined();
-      expect(recording.reading.sourceUrl).toBeUndefined();
-      expect(recording.requestLog[0].headerNames).toEqual(["accept"]);
+      expect(meta.source).toBe("recorded");
+      expect(meta.inventedFields).toHaveLength(1);
       expect(
-        resolve(root, "local/recordings/cli-test-record/record.json"),
-      ).not.toContain(`${join(root, "fixtures")}/`);
+        JSON.parse(readFileSync(join(recordDir, "requests.json"), "utf8")),
+      ).toHaveLength(1);
+      expect(
+        JSON.parse(readFileSync(join(recordDir, "gate.json"), "utf8")),
+      ).toHaveLength(2);
+      expect(
+        JSON.parse(readFileSync(join(recordDir, "expected.json"), "utf8"))
+          .sanitized,
+      ).toBeDefined();
+      expect(
+        JSON.parse(readFileSync(join(recordDir, "responses.json"), "utf8"))[0]
+          .body,
+      ).not.toContain("session");
+      expect(recordDir).not.toContain(`${join(root, "fixtures")}/`);
+      const replay = io();
+      expect(await runCli(["replay", recordDir], replay.value)).toBe(0);
+      const request = fixtureRequest("midnight-end");
+      let responseText = "";
+      const served = io();
+      expect(
+        await runCli(["serve", recordDir], {
+          ...served.value,
+          onServe: async (url, close) => {
+            try {
+              const route = new URL(request.url);
+              const response = await fetch(
+                `${url}${route.pathname}${route.search}`,
+              );
+              responseText = await response.text();
+              expect(response.status).toBe(200);
+            } finally {
+              await close();
+            }
+          },
+        }),
+      ).toBe(0);
+      expect(responseText).toContain("response_code");
     } finally {
       await server.close();
     }
@@ -269,7 +322,13 @@ describe("connector CLI", () => {
     } as unknown as ReadResult;
     try {
       expect(() =>
-        writeRecording(temporary, "symlinked-output", result, new Date()),
+        writeRecording(
+          temporary,
+          "symlinked-output",
+          result,
+          new Date(),
+          "tenant.json",
+        ),
       ).toThrow(/regular local/);
       expect(readdirSync(fixtures)).toEqual([]);
     } finally {
@@ -306,7 +365,13 @@ describe("connector CLI", () => {
     } as unknown as ReadResult;
     try {
       expect(() =>
-        writeRecording(temporary, "symlinked-output", result, new Date()),
+        writeRecording(
+          temporary,
+          "symlinked-output",
+          result,
+          new Date(),
+          "tenant.json",
+        ),
       ).toThrow(/regular local/);
       expect(readdirSync(fixtures)).toEqual([]);
     } finally {
@@ -327,7 +392,7 @@ describe("connector CLI", () => {
         guarded = true;
       },
     });
-    expect(status).toBe(0);
+    expect(status, output.err.join("; ")).toBe(0);
     expect(guarded).toBe(true);
     expect(output.out.join("\n")).toContain("tenant config(s)");
   }, 15_000);
@@ -341,9 +406,25 @@ describe("connector CLI", () => {
       "activenet",
     );
     expect(platforms[0]).not.toHaveProperty("tenant");
+    const packageExports = JSON.parse(
+      readFileSync(join(root, "packages/connectors/package.json"), "utf8"),
+    ).exports as Record<string, unknown>;
+    const registeredIds = listPlatforms()
+      .map((platform) => platform.id)
+      .sort();
+    const publishedIds = Object.keys(packageExports)
+      .filter(
+        (key) =>
+          key.startsWith("./") &&
+          key !== "./testing" &&
+          !key.startsWith("./schema/"),
+      )
+      .map((key) => key.slice(2))
+      .sort();
+    expect(registeredIds).toEqual(publishedIds);
   });
 
-  it("runs the local live-test mode against loopback only", async () => {
+  it("runs counts-only live-test mode against loopback and writes a report", async () => {
     const server = await startFixtureServer(join(cases, "midnight-end"));
     try {
       const output = io();
@@ -359,12 +440,101 @@ describe("connector CLI", () => {
           "--base-url",
           server.url,
         ],
-        output.value,
+        { ...output.value, ci: false },
       );
       expect(status).toBe(0);
-      expect(output.out.join("\n")).toContain("2026-10-31");
+      expect(output.out.join("\n")).toContain("passed=1");
+      expect(output.out.join("\n")).not.toContain("900001");
+      expect(output.out.join("\n")).toContain("courttide.com");
+      const report = JSON.parse(
+        readFileSync(resolve(root, "local/live-report.json"), "utf8"),
+      );
+      expect(report).toMatchObject({ selected: 1, passed: 1, exitCode: 0 });
+      expect(report).not.toHaveProperty("courts");
     } finally {
       await server.close();
+    }
+  });
+
+  it("refuses live mode in CI before reading config or fetching", async () => {
+    let fetched = false;
+    const output = io();
+    const status = await runCli(
+      ["test:live", "--config", "missing-secret-config"],
+      {
+        ...output.value,
+        ci: true,
+        fetch: async () => {
+          fetched = true;
+          return new Response(null, { status: 200 });
+        },
+      },
+    );
+    expect(status).toBe(3);
+    expect(fetched).toBe(false);
+    expect(output.err.join("\n")).toContain("disabled in CI");
+    expect(existsSync(resolve(root, "local/live-report.json"))).toBe(false);
+  });
+
+  it("maps unknown status, rate limits, and blocks to live-runner exit codes", async () => {
+    const scenarios = [
+      { fixture: "unknown-status", expected: 1, count: "parseFailures=1" },
+      { fixture: "rate-limit-no-delay", expected: 2, count: "inconclusive=1" },
+      { fixture: "forbidden", expected: 3, count: "blocked=1" },
+    ];
+    for (const scenario of scenarios) {
+      const server = await startFixtureServer(join(cases, scenario.fixture));
+      try {
+        const output = io();
+        const status = await runCli(
+          [
+            "test:live",
+            "--config",
+            config,
+            "--platform",
+            "activenet",
+            "--courts",
+            "900001",
+            "--base-url",
+            server.url,
+          ],
+          {
+            ...output.value,
+            ci: false,
+            now: () => new Date("2026-01-02T12:00:00.000Z"),
+          },
+        );
+        expect(status).toBe(scenario.expected);
+        expect(output.out.join("\n")).toContain(scenario.count);
+        expect(output.out.join("\n")).not.toContain("900001");
+        const report = JSON.parse(
+          readFileSync(resolve(root, "local/live-report.json"), "utf8"),
+        );
+        expect(report.exitCode).toBe(scenario.expected);
+        expect(report.selected).toBe(1);
+      } finally {
+        await server.close();
+      }
+    }
+  });
+
+  it("rejects unsupported platform configs instead of skipping validation", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "connectors-unknown-platform-"));
+    const invalid = JSON.parse(readFileSync(join(root, config), "utf8"));
+    invalid.platform = "not-registered";
+    writeFileSync(join(temp, "tenant.json"), JSON.stringify(invalid));
+    const output = io();
+    try {
+      const status = await runCli(
+        ["check", join(temp, "tenant.json")],
+        output.value,
+      );
+      expect(status).toBe(1);
+      expect(output.err.join("\n")).toContain(
+        "Unsupported platform: not-registered",
+      );
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
     }
   });
 });

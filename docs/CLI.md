@@ -53,18 +53,35 @@ not contact a provider.
 outputs, requests and gate calls.
 
 `record <platform> --config <file> --court <key> --date YYYY-MM-DD --live --case <name>`
-stores a scrubbed local recording below the git-ignored `local/` directory. It
-omits request header values, the original response body and source URL, and
-refuses to write if the destination is not ignored or resolves into `fixtures/`.
+currently supports ActiveNet. It captures one bounded successful response in
+memory, rebuilds the response from the adapter's normalized payload, verifies
+the result against the complete synthetic conformance suite, then writes a
+`meta.json`, `requests.json`, `responses.json`, `gate.json` and `expected.json`
+fixture below the git-ignored `local/recordings/` directory. If replay differs,
+the recording is removed. The recorded response body is rebuilt; the original
+body is never written. Recording refuses to write if the destination is not
+ignored or resolves into `fixtures/`. CivicRec recording remains unavailable
+until bootstrap secret replacement can be replay-verified.
 
 `check [paths...]` validates JSON tenant configs, runs available platform
 conformance fixtures and the repository data guard. With no paths, it checks
 `examples/tenants/`.
 
-`test:live --config <dir> [--platform <id>] [--courts <key,...>]` runs local
-integration reads using the current date in each config's time zone. Specify
-`--base-url` with a loopback fixture server to keep the run offline. Without
-that option the selected read uses the configured provider origin.
+`test:live --config <dir> [--platform <id>] [--courts <key,...>]` runs bounded
+integration reads using the current date in each config's time zone. It refuses
+to run in CI, stops after the first blocked or inconclusive result, prints only
+aggregate counts plus the CourtTide credit line, and writes those counts to
+git-ignored `local/live-report.json`. Exit codes are 0 for a pass, 1 for a
+parse/schema regression, 2 for an inconclusive response or transport failure,
+and 3 for a blocked run. Specify `--base-url` with a loopback fixture server to
+keep development checks offline. Without that option the selected read uses the
+configured provider origin.
 
 `list` prints registered platform IDs, parser versions and capabilities. It
 does not print tenant configuration.
+
+When adding a platform, import it in
+`packages/connectors/src/cli/registry.ts`, add its registry entry, and set a
+non-default conformance fixture path there if needed. Check discovery with
+`npm run cli -- list` and keep registry IDs aligned with published platform
+subpath exports.

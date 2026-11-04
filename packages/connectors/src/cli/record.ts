@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  realpathSync,
+  rmdirSync,
+  unlinkSync,
+  writeFileSync,
+  existsSync,
+} from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { ReadResult } from "./read.js";
 
@@ -14,6 +22,29 @@ function safeName(value: string): string {
 function within(parent: string, child: string): boolean {
   const path = relative(parent, child);
   return path === "" || (!path.startsWith(`..${sep}`) && path !== "..");
+}
+
+function conformanceCases(result: ReadResult): string[] {
+  const cases = new Set<string>();
+  for (const day of result.reading.days) {
+    if (day.reasonCodes.includes("source_closes_at_midnight")) {
+      cases.add("midnight_end");
+    } else if (day.status === 2) {
+      cases.add("whole_day_closed");
+    } else if (day.status === 4) {
+      cases.add("whole_day_booked");
+    } else if (day.status === 7) {
+      cases.add("hidden_day");
+    } else if (![0, 1].includes(day.status)) {
+      cases.add("unknown_status");
+    } else if (day.intervals.length) {
+      cases.add("open_interval");
+    } else {
+      cases.add("gap");
+    }
+  }
+  if (!cases.size) throw new Error("A recording needs at least one parsed day");
+  return [...cases];
 }
 
 function repositoryRoot(cwd: string): string {
@@ -72,48 +103,111 @@ export function writeRecording(
   name: string,
   result: ReadResult,
   recordedAt: Date,
+  configPath: string,
 ): string {
   const root = repositoryRoot(cwd);
   const directory = resolve(root, "local", "recordings", safeName(name));
-  const target = resolve(directory, "record.json");
+  const target = resolve(directory, "meta.json");
+  if (existsSync(directory))
+    throw new Error("A recording with that case name already exists");
   assertIgnoredLocalPath(root, target);
+  if (result.reading.platform !== "activenet")
+    throw new Error(
+      "record currently supports ActiveNet only; CivicRec requires bootstrap secret replacement verification",
+    );
+  if (result.responses.length !== 1 || result.requestLog.length !== 1)
+    throw new Error("A recording must contain exactly one bounded response");
   const reading = result.reading;
-  const payload = {
-    schemaVersion: "1",
-    source: "recorded",
-    recordedAt: recordedAt.toISOString(),
-    redactions: [
-      "request header values are omitted",
-      "original response body is omitted; adapter-sanitized payload is retained",
-      "read source URL is omitted",
-      "sensitive query parameter values are redacted",
-    ],
-    requestLog: result.requestLog,
-    gateLog: result.gateLog,
-    reading: {
-      platform: reading.platform,
-      tenant: reading.tenant,
-      court: reading.court,
-      startDate: reading.startDate,
-      endDate: reading.endDate,
-      complete: reading.complete,
-      observedAt: reading.observedAt,
-      days: reading.days,
-      sanitizedPayload: reading.sanitized,
-      parser: reading.parser,
-      attribution: reading.attribution,
-    },
-  };
+  const captured = result.responses[0]!;
+  if (captured.response.status !== 200)
+    throw new Error("Only successful 200 responses can be recorded");
+  const details = reading.sanitized;
+  if (!details || typeof details !== "object" || Array.isArray(details))
+    throw new Error("The adapter did not provide a safe normalized payload");
+  let responseCode: unknown;
   try {
-    writeFileSync(target, `${JSON.stringify(payload, null, 2)}\n`, {
-      encoding: "utf8",
-      flag: "wx",
-      mode: 0o600,
-    });
+    const source = JSON.parse(captured.response.text) as {
+      headers?: { response_code?: unknown };
+    };
+    responseCode = source.headers?.response_code;
+  } catch {
+    throw new Error("The ActiveNet response wrapper could not be verified");
+  }
+  if (responseCode !== "0000" && responseCode !== "0001")
+    throw new Error("The ActiveNet response did not contain a success code");
+  const responseBody = JSON.stringify({
+    headers: { response_code: responseCode },
+    body: { details },
+  });
+  const fixtureFiles: Record<string, unknown> = {
+    "meta.json": {
+      source: "recorded",
+      cases: conformanceCases(result),
+      clockNow: reading.observedAt,
+      configPath: resolve(cwd, configPath),
+      court: reading.court,
+      range: { start: reading.startDate, end: reading.endDate },
+      operation: "readCourt",
+      redactions: ["response body rebuilt from the adapter normalized payload"],
+      inventedFields: [
+        "ActiveNet success wrapper response_code 0000 was supplied to replay the normalized details.",
+      ],
+      recordedAt: recordedAt.toISOString(),
+    },
+    "requests.json": result.requestLog,
+    "responses.json": [
+      {
+        status: captured.response.status,
+        headers: { "content-type": "application/json" },
+        body: responseBody,
+      },
+    ],
+    "gate.json": result.gateLog,
+    "expected.json": reading,
+  };
+  const created: string[] = [];
+  try {
+    for (const [filename, value] of Object.entries(fixtureFiles)) {
+      const file = resolve(directory, filename);
+      writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 0o600,
+      });
+      created.push(file);
+    }
   } catch (error) {
+    for (const file of created) unlinkSync(file);
+    try {
+      rmdirSync(directory);
+    } catch {
+      // Preserve a concurrently created path rather than removing unknown data.
+    }
     if ((error as NodeJS.ErrnoException).code === "EEXIST")
       throw new Error("A recording with that case name already exists");
     throw error;
   }
+  return directory;
+}
+
+export function writeLiveReport(
+  cwd: string,
+  report: {
+    generatedAt: string;
+    selected: number;
+    passed: number;
+    parseFailures: number;
+    inconclusive: number;
+    blocked: number;
+    exitCode: number;
+  },
+): string {
+  const root = repositoryRoot(cwd);
+  const target = resolve(root, "local", "live-report.json");
+  assertIgnoredLocalPath(root, target);
+  writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
   return target;
 }

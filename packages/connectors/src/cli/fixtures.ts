@@ -1,11 +1,22 @@
 import { createServer } from "node:http";
 import type { AddressInfo, Server } from "node:net";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { runConformance } from "../testing/conformance.js";
 import type { Platform } from "../contract/types.js";
 import { loadConfig } from "./config.js";
 import { getPlatform } from "./registry.js";
+import { conformanceFixturePath } from "./registry.js";
 
 interface FixtureResponse {
   status?: number;
@@ -199,20 +210,59 @@ export async function replayFixtures(
 ): Promise<{ platform: Platform; fixtures: number; cases: string[] }> {
   const directories = fixtureDirectories(path);
   const casesRoot = resolve(path);
-  if (directories.length === 1 && directories[0] === casesRoot)
-    throw new Error("Pass the fixture cases directory, not a single case");
-  const firstMeta = readJson(join(directories[0]!, "meta.json")) as {
-    configPath?: unknown;
-  };
-  if (typeof firstMeta.configPath !== "string")
-    throw new Error("Fixture config reference is missing");
-  const tenant = loadConfig(
-    resolve(directories[0]!, firstMeta.configPath),
-    "/",
-  );
-  const platform = getPlatform(tenant.platform);
-  const result = await runConformance(platform, casesRoot, {
-    inapplicableCases: inapplicableCases(platform),
-  });
-  return { platform, ...result };
+  let replayRoot = casesRoot;
+  let temporary: string | undefined;
+  if (directories.length === 1 && directories[0] === casesRoot) {
+    temporary = mkdtempSync(join(tmpdir(), "courttide-replay-"));
+    const single = readJson(join(casesRoot, "meta.json")) as {
+      configPath?: unknown;
+    };
+    if (typeof single.configPath !== "string") {
+      rmSync(temporary, { recursive: true, force: true });
+      throw new Error("Fixture config reference is missing");
+    }
+    const tenant = loadConfig(resolve(casesRoot, single.configPath), "/");
+    const sourceRoot = resolve(
+      process.cwd(),
+      conformanceFixturePath(tenant.platform),
+    );
+    cpSync(sourceRoot, temporary, { recursive: true });
+    for (const entry of readdirSync(sourceRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const sourceDirectory = join(sourceRoot, entry.name);
+      const metaPath = join(sourceDirectory, "meta.json");
+      if (!existsSync(metaPath)) continue;
+      const meta = readJson(metaPath) as { configPath?: unknown };
+      if (typeof meta.configPath !== "string") continue;
+      const copiedMeta = {
+        ...meta,
+        configPath: resolve(sourceDirectory, meta.configPath),
+      };
+      writeFileSync(
+        join(temporary, entry.name, "meta.json"),
+        `${JSON.stringify(copiedMeta, null, 2)}\n`,
+      );
+    }
+    const copy = join(temporary, "local-recording");
+    cpSync(casesRoot, copy, { recursive: true });
+    replayRoot = temporary;
+  }
+  try {
+    const firstMeta = readJson(join(directories[0]!, "meta.json")) as {
+      configPath?: unknown;
+    };
+    if (typeof firstMeta.configPath !== "string")
+      throw new Error("Fixture config reference is missing");
+    const tenant = loadConfig(
+      resolve(directories[0]!, firstMeta.configPath),
+      "/",
+    );
+    const platform = getPlatform(tenant.platform);
+    const result = await runConformance(platform, replayRoot, {
+      inapplicableCases: inapplicableCases(platform),
+    });
+    return { platform, ...result };
+  } finally {
+    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  }
 }

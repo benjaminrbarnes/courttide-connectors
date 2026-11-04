@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { Temporal } from "@js-temporal/polyfill";
 import { TenantConfigSchema } from "../contract/schemas.js";
+import { validateCourtReading } from "../contract/validation.js";
 import type { Platform, TenantConfig } from "../contract/types.js";
 import { parseArgs, singleOption } from "./args.js";
 import { configFiles, loadConfig, validatePlatformConfig } from "./config.js";
@@ -13,9 +14,9 @@ import {
   parseReadOptions,
   readCourt,
 } from "./read.js";
-import { writeRecording } from "./record.js";
+import { writeLiveReport, writeRecording } from "./record.js";
 import { conformanceFixturePath, listPlatforms } from "./registry.js";
-import type { CliIO, ReadOptions } from "./types.js";
+import { CliExit, type CliIO, type ReadOptions } from "./types.js";
 
 const creditLine =
   "Read with courttide-connectors by CourtTide · https://courttide.com";
@@ -74,9 +75,29 @@ async function commandRecord(
   );
   const options = parseReadOptions(parsed);
   const name = singleOption(parsed.values, "case", true)!;
-  const result = await readCourt(options, io);
-  const path = writeRecording(io.cwd, name, result, io.now?.() ?? new Date());
-  io.stdout(`Scrubbed local recording written: ${path}`);
+  if (options.platform !== "activenet")
+    throw new Error(
+      "record currently supports ActiveNet only; CivicRec bootstrap secret replacement verification is not yet available",
+    );
+  const execution = createCliGate(10_000);
+  execution.captureResponses = true;
+  const result = await readCourt(options, io, execution);
+  const path = writeRecording(
+    io.cwd,
+    name,
+    result,
+    io.now?.() ?? new Date(),
+    options.config,
+  );
+  try {
+    await replayFixtures(path);
+  } catch (error) {
+    rmSync(path, { recursive: true, force: true });
+    throw new Error(
+      `Recording failed offline parity verification: ${error instanceof Error ? error.message : "fixture mismatch"}`,
+    );
+  }
+  io.stdout(`Verified local recording written: ${path}`);
 }
 
 async function commandServe(args: readonly string[], io: CliIO): Promise<void> {
@@ -138,7 +159,8 @@ async function commandCheck(args: readonly string[], io: CliIO): Promise<void> {
   for (const path of configs) {
     const tenant = validateConfigFile(path);
     const platform = unknownPlatformPlatform(tenant.platform);
-    if (platform) validatePlatformConfig(tenant, platform);
+    if (!platform) throw new Error(`Unsupported platform: ${tenant.platform}`);
+    validatePlatformConfig(tenant, platform);
   }
   const platforms = listPlatforms();
   let fixtureCount = 0;
@@ -178,6 +200,10 @@ async function commandTestLive(
   const parsed = parseArgs(args, ["config", "platform", "courts", "base-url"]);
   if (parsed.positional.length)
     throw new Error("test:live accepts only options");
+  if (io.ci ?? Boolean(process.env.CI)) {
+    io.stderr("test:live is disabled in CI; no configured source was read.");
+    throw new CliExit(3);
+  }
   const configPath = singleOption(parsed.values, "config", true)!;
   const platformFilter = singleOption(parsed.values, "platform");
   const courtOption = singleOption(parsed.values, "courts");
@@ -197,8 +223,8 @@ async function commandTestLive(
   if (!files.length) throw new Error("No tenant configs found");
   const targets: {
     options: ReadOptions;
-    timeZone: string;
-    minimumGapMs: number;
+    tenant: TenantConfig;
+    platform: Platform;
   }[] = [];
   const foundCourts = new Set<string>();
   for (const file of files) {
@@ -229,8 +255,8 @@ async function commandTestLive(
           json: false,
           ...(baseUrl ? { baseUrl } : {}),
         },
-        timeZone: tenant.timeZone,
-        minimumGapMs: capabilities.minimumGapMs,
+        tenant,
+        platform,
       });
     }
   }
@@ -243,12 +269,119 @@ async function commandTestLive(
   if (!targets.length)
     throw new Error("No matching configured court was selected");
   const execution = createCliGate(
-    Math.max(...targets.map((target) => target.minimumGapMs)),
+    Math.max(
+      ...targets.map(
+        (target) =>
+          validatePlatformConfig(target.tenant, target.platform).minimumGapMs,
+      ),
+    ),
   );
+  const counts = {
+    selected: targets.length,
+    passed: 0,
+    parseFailures: 0,
+    inconclusive: 0,
+    blocked: 0,
+  };
+  let exitCode: 0 | 1 | 2 | 3 = 0;
   for (const target of targets) {
-    const result = await readCourt(target.options, io, execution);
-    io.stdout(formatReading(result.reading, target.timeZone));
+    try {
+      const result = await readCourt(target.options, io, execution);
+      const park = target.tenant.parks.find((item) =>
+        item.courts.some((court) => court.key === target.options.court),
+      );
+      const reading = validateCourtReading(result.reading, {
+        shape: target.platform.capabilities(target.tenant).shape,
+        timeZone: target.tenant.timeZone,
+        parkSlug: park?.courttideSlug,
+      });
+      const allowedStatuses =
+        target.platform.id === "activenet"
+          ? new Set([0, 1, 2, 4, 7])
+          : new Set([200]);
+      const allowedReasons = new Set([
+        "date_coverage_incomplete",
+        "date_out_of_range",
+        "date_mismatch",
+        "display_hours_conflict",
+        "display_hours_missing_or_invalid",
+        "duplicate_source_date",
+        "empty_display_hours",
+        "empty_hours",
+        "epoch_local_mismatch",
+        "hours_missing_or_invalid",
+        "invalid_epoch",
+        "invalid_local_time",
+        "invalid_payload",
+        "invalid_range_shape",
+        "invalid_request_context",
+        "invalid_signal",
+        "lit_operation_unknown",
+        "nonpositive_range",
+        "rate_mismatch",
+        "range_limit_exceeded",
+        "text_limit_exceeded",
+        "unsupported_cross_date_range",
+        "occupancy_unknown",
+        "range_incomplete",
+        "reported_ranges_only",
+        "source_closes_at_midnight",
+        "source_fully_booked",
+        "source_hidden_or_unavailable",
+        "source_schedule_closed",
+        "unknown_source_status",
+        "unsupported_check_mode",
+        "unsupported_time",
+      ]);
+      if (
+        reading.days.some(
+          (day) =>
+            !allowedStatuses.has(day.status) ||
+            day.reasonCodes.some((reason) => !allowedReasons.has(reason)),
+        )
+      ) {
+        counts.parseFailures += 1;
+        exitCode = 1;
+        break;
+      }
+      counts.passed += 1;
+    } catch (error) {
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String(error.code)
+          : "";
+      const lastRelease = [...execution.gateLog]
+        .reverse()
+        .find((entry) => entry.type === "release") as
+        { outcome?: { status?: number } } | undefined;
+      const httpStatus = lastRelease?.outcome?.status;
+      if (code === "access_blocked" || code === "auth_required") {
+        counts.blocked += 1;
+        exitCode = 3;
+      } else if (
+        code === "rate_limited" ||
+        (httpStatus !== undefined && httpStatus >= 500) ||
+        (httpStatus === undefined && code === "http_error") ||
+        (error instanceof Error && error.name === "GateDeferred")
+      ) {
+        counts.inconclusive += 1;
+        exitCode = 2;
+      } else {
+        counts.parseFailures += 1;
+        exitCode = 1;
+      }
+      break;
+    }
   }
+  writeLiveReport(io.cwd, {
+    generatedAt: (io.now?.() ?? new Date()).toISOString(),
+    ...counts,
+    exitCode,
+  });
+  io.stdout(
+    `Live test counts: selected=${counts.selected} passed=${counts.passed} parseFailures=${counts.parseFailures} inconclusive=${counts.inconclusive} blocked=${counts.blocked}\n${creditLine}`,
+  );
+  if (exitCode !== 0) throw new CliExit(exitCode);
 }
 
 function commandList(io: CliIO): void {

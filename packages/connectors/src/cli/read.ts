@@ -6,6 +6,9 @@ import type {
   Gate,
   GateOutcome,
   GateRequest,
+  HttpRequest,
+  HttpResponse,
+  HttpClient,
   TenantConfig,
 } from "../contract/types.js";
 import { createConnectorRuntime } from "../runtime/http.js";
@@ -20,12 +23,15 @@ export interface ReadResult {
   reading: CourtReading;
   requestLog: Record<string, unknown>[];
   gateLog: Record<string, unknown>[];
+  responses: { request: HttpRequest; response: HttpResponse }[];
 }
 
 export interface ReadExecution {
   gate: Gate;
   requestLog: Record<string, unknown>[];
   gateLog: Record<string, unknown>[];
+  captureResponses?: boolean;
+  responses: { request: HttpRequest; response: HttpResponse }[];
 }
 
 const unsafeParam =
@@ -91,13 +97,16 @@ function makeFetch(
     const rawHeaders = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     );
-    requestLog.push({
+    const loggedInit: Record<string, unknown> = {
       method: method.toUpperCase(),
-      url: sanitizedUrl(sourceUrl),
-      headerNames: [...rawHeaders.keys()]
-        .map((name) => name.toLowerCase())
-        .sort(),
-    });
+      headers: Object.fromEntries(rawHeaders.entries()),
+      credentials: init?.credentials ?? "omit",
+      redirect: init?.redirect ?? "manual",
+      cache: init?.cache ?? "no-store",
+      signal: init?.signal ? "present" : null,
+    };
+    if (init?.body !== undefined) loggedInit.body = init.body;
+    requestLog.push({ url: sourceUrl, init: loggedInit });
     if (!baseUrl) return transport(input, init);
     const target = new URL(sourceUrl);
     target.protocol = baseUrl.protocol;
@@ -119,7 +128,7 @@ export function createCliGate(minimumGapMs: number): ReadExecution {
     async acquire(request: GateRequest) {
       calls.push({
         type: "acquire",
-        request: { ...request, url: sanitizedUrl(request.url) },
+        request: { ...request },
       });
       const ticket = await gate.acquire(request);
       const id = ++index;
@@ -134,7 +143,7 @@ export function createCliGate(minimumGapMs: number): ReadExecution {
       await gate.release(ticket, outcome);
     },
   };
-  return { gate: recording, requestLog: [], gateLog: calls };
+  return { gate: recording, requestLog: [], gateLog: calls, responses: [] };
 }
 
 function findCourt(tenant: TenantConfig, key: string) {
@@ -215,10 +224,21 @@ export async function readCourt(
     ),
     now: io.now ?? (() => new Date()),
   });
+  const http: HttpClient = execution.captureResponses
+    ? {
+        async request(request) {
+          const response = await runtime.http.request(request);
+          if (new TextEncoder().encode(response.text).byteLength > 1_048_576)
+            throw new ConnectorError("schema_changed");
+          execution.responses.push({ request, response });
+          return response;
+        },
+      }
+    : runtime.http;
   const connector = platform.createConnector({
     tenant,
     courts: [options.court],
-    http: runtime.http,
+    http,
     now: io.now ?? (() => new Date()),
   });
   const reading = await runtime.execute(() =>
@@ -229,7 +249,7 @@ export async function readCourt(
     park.courttideSlug === undefined
   )
     throw new ConnectorError("schema_changed");
-  return { reading, requestLog, gateLog };
+  return { reading, requestLog, gateLog, responses: execution.responses };
 }
 
 function localClock(instant: string, timeZone: string): string {

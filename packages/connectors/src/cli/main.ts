@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { ConnectorError, GateDeferred } from "../contract/errors.js";
 import { runCommand } from "./commands.js";
-import type { CliIO } from "./types.js";
+import { CliExit, type CliIO } from "./types.js";
 
 export async function runCli(
   argv: readonly string[],
@@ -12,12 +13,25 @@ export async function runCli(
     await runCommand(argv, io);
     return 0;
   } catch (error) {
+    if (error instanceof CliExit) return error.exitCode;
     if (error instanceof ConnectorError)
       io.stderr(`Connector read failed: ${error.code}`);
     else if (error instanceof GateDeferred)
       io.stderr(`Request deferred until ${error.until} (${error.reason}).`);
     else io.stderr(error instanceof Error ? error.message : "Command failed");
     return 1;
+  }
+}
+
+export function isDirectExecution(
+  moduleUrl: string,
+  argvPath = process.argv[1],
+): boolean {
+  if (!argvPath) return false;
+  try {
+    return realpathSync(fileURLToPath(moduleUrl)) === realpathSync(argvPath);
+  } catch {
+    return false;
   }
 }
 
@@ -30,9 +44,4 @@ async function main(): Promise<void> {
   process.exitCode = await runCli(process.argv.slice(2), io);
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
-  await main();
-}
+if (isDirectExecution(import.meta.url)) await main();
