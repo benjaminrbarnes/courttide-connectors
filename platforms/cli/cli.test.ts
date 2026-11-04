@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -422,6 +423,123 @@ describe("connector CLI", () => {
       await server.close();
     }
   }, 20_000);
+
+  it("records and replays both bounded CivicRec calendar days", async () => {
+    const temporary = mkdtempSync(
+      join(tmpdir(), "connectors-cli-civicrec-2d-"),
+    );
+    const source = resolve(root, "platforms/civicrec/fixtures/open");
+    const fixture = join(temporary, "open");
+    cpSync(source, fixture, { recursive: true });
+    const requests = JSON.parse(
+      readFileSync(join(fixture, "requests.json"), "utf8"),
+    ) as { url: string; init: { headers: Record<string, string> } }[];
+    const responses = JSON.parse(
+      readFileSync(join(fixture, "responses.json"), "utf8"),
+    ) as { status: number; headers: unknown; body: string }[];
+    const secondRequest = structuredClone(requests[1]!);
+    secondRequest.url = secondRequest.url.replace("2026-11-04", "2026-11-05");
+    requests.push(secondRequest);
+    const secondResponse = structuredClone(responses[1]!);
+    const secondPayload = JSON.parse(secondResponse.body) as {
+      hours: { start: number; end: number; startDtm: string; endDtm: string }[];
+      displayHours: {
+        start: number;
+        end: number;
+        startDtm: string;
+        endDtm: string;
+      }[];
+    };
+    for (const range of [
+      ...secondPayload.hours,
+      ...secondPayload.displayHours,
+    ]) {
+      range.start += 86_400;
+      range.end += 86_400;
+      range.startDtm = range.startDtm.replace("2026-11-04", "2026-11-05");
+      range.endDtm = range.endDtm.replace("2026-11-04", "2026-11-05");
+    }
+    secondResponse.body = JSON.stringify(secondPayload);
+    responses.push(secondResponse);
+    writeFileSync(join(fixture, "requests.json"), JSON.stringify(requests));
+    writeFileSync(join(fixture, "responses.json"), JSON.stringify(responses));
+
+    const server = await startFixtureServer(fixture);
+    try {
+      const output = io();
+      const status = await runCli(
+        [
+          "record",
+          "civicrec",
+          "--config",
+          "examples/tenants/civicrec.json",
+          "--court",
+          "900003",
+          "--date",
+          "2026-11-04",
+          "--days",
+          "2",
+          "--live",
+          "--case",
+          "cli-test-record",
+          "--base-url",
+          server.url,
+        ],
+        {
+          ...output.value,
+          now: () => new Date(),
+        },
+      );
+      expect(status, output.err.join("; ")).toBe(0);
+      const meta = JSON.parse(
+        readFileSync(join(recordDir, "meta.json"), "utf8"),
+      );
+      expect(meta.range).toEqual({
+        start: "2026-11-04",
+        end: "2026-11-05",
+      });
+      expect(meta.clockSequence).toHaveLength(4);
+      expect(
+        JSON.parse(readFileSync(join(recordDir, "requests.json"), "utf8")),
+      ).toHaveLength(3);
+      expect(
+        JSON.parse(readFileSync(join(recordDir, "responses.json"), "utf8")),
+      ).toHaveLength(3);
+      expect(await runCli(["replay", recordDir], io().value)).toBe(0);
+      const recordedRequests = JSON.parse(
+        readFileSync(join(recordDir, "requests.json"), "utf8"),
+      ) as { url: string; init: { headers: Record<string, string> } }[];
+      const servedBodies: string[] = [];
+      const serveOutput = io();
+      expect(
+        await runCli(["serve", recordDir], {
+          ...serveOutput.value,
+          onServe: async (url, close) => {
+            try {
+              for (const request of recordedRequests) {
+                const route = new URL(request.url);
+                const response = await fetch(
+                  `${url}${route.pathname}${route.search}`,
+                  { headers: request.init.headers },
+                );
+                expect(response.status).toBe(200);
+                servedBodies.push(await response.text());
+              }
+            } finally {
+              await close();
+            }
+          },
+        }),
+      ).toBe(0);
+      expect(servedBodies).toHaveLength(3);
+      expect(servedBodies[0]).toContain("synthetic-session-key");
+      expect(servedBodies[1]).toContain("2026-11-04");
+      expect(servedBodies[2]).toContain("2026-11-05");
+    } finally {
+      await server.close();
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  }, 35_000);
 
   it("refuses to follow a local directory symlink into fixtures", async () => {
     const temporary = mkdtempSync(join(tmpdir(), "connectors-cli-record-"));

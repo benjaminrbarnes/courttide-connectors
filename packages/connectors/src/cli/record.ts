@@ -473,16 +473,17 @@ function sanitizedFiles(
     );
   } else if (reading.platform === "civicrec") {
     if (
-      captured.length !== 2 ||
-      requests.length !== 2 ||
+      captured.length < 2 ||
+      captured.length > 3 ||
+      requests.length !== captured.length ||
       captured[0]!.request.purpose !== "bootstrap" ||
-      captured[1]!.request.purpose !== "calendar"
+      captured.slice(1).some((item) => item.request.purpose !== "calendar") ||
+      captured.length !== reading.days.length + 1
     )
       throw new Error(
-        "CivicRec recording requires one bootstrap and one calendar response",
+        "CivicRec recording requires one bootstrap and one response per bounded day",
       );
     const bootstrapCapture = captured[0]!;
-    const calendarCapture = captured[1]!;
     const bootstrapUrl = bootstrapCapture.request.url;
     const bootstrap = parseAnonymousBootstrap({
       html: bootstrapCapture.response.text,
@@ -504,13 +505,28 @@ function sanitizedFiles(
       bootstrapCapture.response.text,
       bootstrap.key,
     );
-    requests[1]!.url = replaceKeyInUrl(requests[1]!.url, bootstrap.key);
-    const calendarCookie = requests[1]!.init.headers.cookie;
-    if (calendarCookie !== bootstrap.cookie)
-      throw new Error(
-        "Recorded calendar cookie did not match the bootstrap jar",
+    responses = [
+      responseFixture(bootstrapCapture.response, bootstrapHtml, cookies.rows),
+    ];
+    for (const [index, calendarCapture] of captured.slice(1).entries()) {
+      const requestIndex = index + 1;
+      requests[requestIndex]!.url = replaceKeyInUrl(
+        requests[requestIndex]!.url,
+        bootstrap.key,
       );
-    requests[1]!.init.headers.cookie = cookies.requestCookie;
+      const calendarCookie = requests[requestIndex]!.init.headers.cookie;
+      if (calendarCookie !== bootstrap.cookie)
+        throw new Error(
+          "Recorded calendar cookie did not match the bootstrap jar",
+        );
+      requests[requestIndex]!.init.headers.cookie = cookies.requestCookie;
+      responses.push(
+        responseFixture(
+          calendarCapture.response,
+          safeCalendarPayload(calendarCapture.response.text),
+        ),
+      );
+    }
     for (const entry of gate) {
       if (
         entry.type === "acquire" &&
@@ -519,13 +535,6 @@ function sanitizedFiles(
       )
         entry.request.url = replaceKeyInUrl(entry.request.url, bootstrap.key);
     }
-    responses = [
-      responseFixture(bootstrapCapture.response, bootstrapHtml, cookies.rows),
-      responseFixture(
-        calendarCapture.response,
-        safeCalendarPayload(calendarCapture.response.text),
-      ),
-    ];
     redactions.push(
       "Bootstrap checkout key replaced in the page-data attribute and its follow-up calendar URL.",
       "Set-Cookie values replaced with synthetic values in the bootstrap response and follow-up Cookie header.",
@@ -661,6 +670,8 @@ export async function writeRecording(
     for (const [filename, value] of Object.entries(files))
       writeJson(join(staging, filename), value);
     await replayFixtures(staging);
+    preflightRecordingDestination(cwd, name);
+    assertIgnoredLocalPath(root, join(staging, "meta.json"), false);
     if (existsSync(directory))
       throw new Error("A recording case path appeared during verification");
     renameSync(staging, directory);

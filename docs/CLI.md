@@ -52,9 +52,9 @@ not contact a provider.
 `replay <fixture-dir>` runs conformance checks offline against saved expected
 outputs, requests and gate calls.
 
-`record <platform> --config <file> --court <key> --date YYYY-MM-DD --live --case <name>`
-captures one bounded successful ActiveNet response or a bounded CivicRec
-bootstrap/calendar pair. It writes a `meta.json`, `requests.json`,
+`record <platform> --config <file> --court <key> --date YYYY-MM-DD [--days N] --live --case <name>`
+captures one bounded successful ActiveNet response or one CivicRec bootstrap
+and up to two bounded per-day calendar responses. It writes a `meta.json`, `requests.json`,
 `responses.json`, `gate.json` and `expected.json` fixture below the git-ignored
 `local/recordings/` directory only after replaying the fixture with the complete
 synthetic conformance suite and confirming exact reading equality. ActiveNet
