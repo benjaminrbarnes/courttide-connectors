@@ -440,7 +440,56 @@ function inspectFixtureMetadata(files, findings) {
   }
 }
 
-export function scanRepository(root, packageDirectory = "packages/connectors") {
+export function scanPackedArchive(archive) {
+  const findings = [];
+  const files = new Map();
+  const names = execFileSync("tar", ["-tzf", archive], { encoding: "utf8" })
+    .split("\n")
+    .filter(Boolean);
+  const details = execFileSync("tar", ["-tvzf", archive], { encoding: "utf8" })
+    .split("\n")
+    .filter(Boolean);
+  if (names.length !== details.length)
+    throw new Error("Invalid archive listing");
+  const seen = new Set();
+  for (const [index, name] of names.entries()) {
+    if (
+      !/^package\/[a-z0-9@+._/-]*$/i.test(name) ||
+      /(^|\/)\.\.?($|\/)/.test(name) ||
+      seen.has(name)
+    ) {
+      findings.push({
+        path: "packed",
+        reason: "unsafe or duplicate archive entry",
+      });
+      continue;
+    }
+    seen.add(name);
+    const kind = details[index]?.[0];
+    if (kind === "d" && name.endsWith("/")) continue;
+    if (kind !== "-") {
+      findings.push({
+        path: `packed/${name.slice(8)}`,
+        reason: "non-regular archive entry",
+      });
+      continue;
+    }
+    const path = `packed/${name.slice(8)}`;
+    const bytes = execFileSync("tar", ["-xOf", archive, name], {
+      maxBuffer: 100 * 1024 * 1024,
+    });
+    files.set(path, bytes);
+    inspectBytes(path, bytes, findings);
+  }
+  inspectFixtureMetadata(files, findings);
+  return findings;
+}
+
+export function scanRepository(
+  root,
+  packageDirectory = "packages/connectors",
+  packedArchive,
+) {
   const findings = [];
   const repositoryFiles = new Map();
   const stagedFiles = new Map();
@@ -498,35 +547,29 @@ export function scanRepository(root, packageDirectory = "packages/connectors") {
   }
   inspectFixtureMetadata(repositoryFiles, findings);
 
-  const temporary = mkdtempSync(join(tmpdir(), "connectors-pack-"));
-  try {
-    const result = JSON.parse(
-      execFileSync(
-        "npm",
-        ["pack", "--ignore-scripts", "--json", "--pack-destination", temporary],
-        {
-          cwd: join(root, packageDirectory),
-          encoding: "utf8",
-        },
-      ),
-    );
-    if (result.length !== 1)
-      throw new Error("Expected exactly one packed package");
-    const archive = join(temporary, result[0].filename);
-    const packedFiles = new Map();
-    for (const file of result[0].files) {
-      const path = `packed/${file.path}`;
-      const bytes = execFileSync(
-        "tar",
-        ["-xOf", archive, `package/${file.path}`],
-        { maxBuffer: 100 * 1024 * 1024 },
+  if (packedArchive) findings.push(...scanPackedArchive(packedArchive));
+  else {
+    const temporary = mkdtempSync(join(tmpdir(), "connectors-pack-"));
+    try {
+      const result = JSON.parse(
+        execFileSync(
+          "npm",
+          [
+            "pack",
+            "--ignore-scripts",
+            "--json",
+            "--pack-destination",
+            temporary,
+          ],
+          { cwd: join(root, packageDirectory), encoding: "utf8" },
+        ),
       );
-      packedFiles.set(path, bytes);
-      inspectBytes(path, bytes, findings);
+      if (result.length !== 1)
+        throw new Error("Expected exactly one packed package");
+      findings.push(...scanPackedArchive(join(temporary, result[0].filename)));
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
     }
-    inspectFixtureMetadata(packedFiles, findings);
-  } finally {
-    rmSync(temporary, { recursive: true, force: true });
   }
   return findings;
 }

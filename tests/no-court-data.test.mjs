@@ -1,11 +1,18 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   inspectText,
   isInternalHost,
+  scanPackedArchive,
   scanRepository,
 } from "../scripts/no-court-data.mjs";
 
@@ -16,6 +23,34 @@ afterEach(() => {
 });
 
 describe("repository data check", () => {
+  it("scans the exact archive even when its source later changes", () => {
+    const root = mkdtempSync(join(tmpdir(), "connectors-archive-"));
+    temporary.push(root);
+    mkdirSync(join(root, "package", "dist"), { recursive: true });
+    const source = join(root, "package", "dist", "index.js");
+    const planted = JSON.stringify({ facilityId: 900099 + 1 });
+    writeFileSync(source, `export default ${planted};\n`);
+    const archive = join(root, "example.tgz");
+    execFileSync("tar", ["-czf", archive, "-C", root, "package"]);
+    writeFileSync(source, "export default {};\n");
+    expect(scanPackedArchive(archive)).toContainEqual({
+      path: "packed/dist/index.js",
+      reason: "non-example identifier",
+    });
+  });
+
+  it("rejects links in a packed archive", () => {
+    const root = mkdtempSync(join(tmpdir(), "connectors-archive-"));
+    temporary.push(root);
+    mkdirSync(join(root, "package", "dist"), { recursive: true });
+    symlinkSync("target", join(root, "package", "dist", "link"));
+    const archive = join(root, "example.tgz");
+    execFileSync("tar", ["-czf", archive, "-C", root, "package"]);
+    expect(scanPackedArchive(archive)).toContainEqual({
+      path: "packed/dist/link",
+      reason: "non-regular archive entry",
+    });
+  });
   it("allows synthetic identifiers and detects a planted configuration", () => {
     const example = {
       tenant: "example",
