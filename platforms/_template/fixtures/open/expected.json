@@ -1,0 +1,43 @@
+{
+  "platform": "example",
+  "tenant": "exampleparks",
+  "court": "900001",
+  "startDate": "2026-11-04",
+  "endDate": "2026-11-04",
+  "complete": true,
+  "observedAt": "2026-11-04T12:00:00.000Z",
+  "sourceUrl": "https://example.invalid/calendar/900001?date=2026-11-04",
+  "days": [
+    {
+      "date": "2026-11-04",
+      "observedAt": "2026-11-04T12:00:00.000Z",
+      "status": 0,
+      "visibility": "visible",
+      "coverage": "complete",
+      "usable": true,
+      "reasonCodes": [],
+      "intervals": [
+        {
+          "start": "2026-11-04T08:00:00.000Z",
+          "end": "2026-11-04T09:00:00.000Z",
+          "available": true
+        }
+      ]
+    }
+  ],
+  "sanitized": {
+    "date": "2026-11-04",
+    "start": "2026-11-04T08:00:00.000Z",
+    "end": "2026-11-04T09:00:00.000Z"
+  },
+  "parser": {
+    "id": "example-parser",
+    "version": "1",
+    "signature": "example-v1"
+  },
+  "attribution": {
+    "text": "Read with courttide-connectors by CourtTide",
+    "url": "https://courttide.com",
+    "parkUrl": "https://courttide.com/courts/example-park"
+  }
+}
