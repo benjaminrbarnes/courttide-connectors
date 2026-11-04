@@ -1,0 +1,6 @@
+{
+  "name": "ConnectorError",
+  "code": "identity_mismatch",
+  "retryable": false,
+  "retryAfterMs": null
+}

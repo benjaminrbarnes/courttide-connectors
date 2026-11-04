@@ -1,0 +1,9 @@
+[
+  {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"headers\":{\"response_code\":\"0000\"},\"body\":{\"details\":{\"resource_id\":900001,\"daily_details\":[{\"date\":\"2026-01-02\",\"status\":7,\"check_in_only\":false,\"check_out_only\":false,\"times\":[]},{\"date\":\"2026-01-03\",\"status\":0,\"check_in_only\":false,\"check_out_only\":false,\"times\":[{\"available\":true,\"start_time\":\"09:00:00\",\"end_time\":\"11:00:00\",\"is_cross_day\":false}]}]}}}"
+  }
+]

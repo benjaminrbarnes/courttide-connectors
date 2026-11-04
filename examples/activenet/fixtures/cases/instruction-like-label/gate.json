@@ -1,0 +1,19 @@
+[
+  {
+    "type": "acquire",
+    "request": {
+      "court": "900001",
+      "purpose": "identity",
+      "method": "GET",
+      "url": "https://example.activecommunities.com/exampleparks/rest/reservation/resource/detail/900001"
+    }
+  },
+  {
+    "type": "release",
+    "ticket": 1,
+    "outcome": {
+      "ok": true,
+      "status": 200
+    }
+  }
+]

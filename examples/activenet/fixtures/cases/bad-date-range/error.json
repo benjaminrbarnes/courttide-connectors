@@ -1,0 +1,6 @@
+{
+  "name": "ConnectorError",
+  "code": "unsupported_time",
+  "retryable": false,
+  "retryAfterMs": null
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"headers\":{\"response_code\":\"0000\"},\"body\":{\"details\":{\"resource_id\":900001,\"daily_details\":[{\"date\":\"2026-01-02\",\"status\":2,\"check_in_only\":false,\"check_out_only\":false,\"times\":[]},{\"date\":\"2026-01-03\",\"status\":4,\"check_in_only\":false,\"check_out_only\":false,\"times\":[]}]}}}"
+  }
+]

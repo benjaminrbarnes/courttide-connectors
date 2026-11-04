@@ -1,0 +1,19 @@
+[
+  {
+    "type": "acquire",
+    "request": {
+      "court": "900001",
+      "purpose": "calendar",
+      "method": "GET",
+      "url": "https://example.activecommunities.com/exampleparks/rest/reservation/resource/availability/daily/900001?start_date=2026-10-31&end_date=2026-10-31&customer_id=0&company_id=0&locale=en-US"
+    }
+  },
+  {
+    "type": "release",
+    "ticket": 1,
+    "outcome": {
+      "ok": true,
+      "status": 200
+    }
+  }
+]

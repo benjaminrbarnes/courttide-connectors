@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1",
+  "platform": "activenet",
+  "tenant": "exampleparks",
+  "timeZone": "America/New_York",
+  "origin": "https://example.activecommunities.com",
+  "params": { "basePath": "/exampleparks" },
+  "parks": [
+    {
+      "key": "example-park",
+      "name": "Example Park",
+      "courttideSlug": "example-park",
+      "courts": [
+        {
+          "key": "900001",
+          "label": "Example Court",
+          "params": {}
+        }
+      ]
+    }
+  ]
+}

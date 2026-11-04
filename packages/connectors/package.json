@@ -25,6 +25,10 @@
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
     },
+    "./activenet": {
+      "types": "./dist/platforms/activenet/index.d.ts",
+      "default": "./dist/platforms/activenet/index.js"
+    },
     "./schema/tenant.schema.json": "./schema/tenant.schema.json"
   },
   "peerDependencies": {
