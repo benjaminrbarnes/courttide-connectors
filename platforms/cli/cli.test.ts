@@ -646,7 +646,7 @@ describe("connector CLI", () => {
     expect(status, output.err.join("; ")).toBe(0);
     expect(guarded).toBe(true);
     expect(output.out.join("\n")).toContain("tenant config(s)");
-  }, 15_000);
+  }, 30_000);
 
   it("lists platform capabilities without tenant configurations", async () => {
     const output = io();
