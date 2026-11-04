@@ -74,14 +74,22 @@ conformance fixtures and the repository data guard. With no paths, it checks
 
 `test:live --config <dir> [--platform <id>] [--courts <key,...>] [--date YYYY-MM-DD] [--days N]`
 runs bounded integration reads using the current date in each config's time
-zone unless a date is selected. It refuses
-to run in CI, stops after the first failure, caps `--days` at the platform
-maximum, prints only aggregate counts plus the CourtTide credit line, and writes those counts to
-git-ignored `local/live-report.json`. Exit codes are 0 for a pass, 1 for a
-parse/schema regression, 2 for an inconclusive response or transport failure,
-and 3 for a blocked run. Specify `--base-url` with a loopback fixture server to
-keep development checks offline. Without that option the selected read uses the
-configured provider origin.
+zone unless a date is selected. The CLI's `politeGate` applies its minimum-gap,
+rolling-window, block and backoff caps within the invocation. Coordinate
+human-paced reads across local workers, sessions and iterations, leaving at
+least 10 seconds between requests and staying within 6 per rolling minute, 20
+per rolling 10 minutes and 30 per rolling hour. Honor `Retry-After` and stop on
+a block or challenge. This
+local command does not require production database access, production
+transactions, SSH access or worker leases. Deployed callers keep their existing
+budgets, admission, leases and backoff. It refuses to run in CI, stops after
+the first failure, caps `--days` at the platform maximum, prints only aggregate
+counts plus the CourtTide credit line, and writes those counts to git-ignored
+`local/live-report.json`. Exit
+codes are 0 for a pass, 1 for a parse/schema regression, 2 for an inconclusive
+response or transport failure, and 3 for a blocked run. Specify `--base-url`
+with a loopback fixture server to keep development checks offline. Without
+that option the selected read uses the configured provider origin.
 
 `list` prints registered platform IDs, parser versions and capabilities. It
 does not print tenant configuration.

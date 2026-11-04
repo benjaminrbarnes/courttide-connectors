@@ -23,12 +23,17 @@ hold, waitlist, booking, payment or checkout. Observe calls made by the page;
 never invent an endpoint. Stop at the first 403, 429 or challenge and do not
 bypass it.
 
-Share a gate per connector and upstream target across courts, workers, clients
-and iterations. Wait at least 10 seconds between requests and stay within 6 per
-rolling minute, 20 per rolling 10 minutes and 30 per rolling hour. These are
-ceilings, not quotas. Use judgment for a small test-and-adjust session, reuse
-sessions when appropriate, and coordinate separate processes through existing
-admission, leases and backoff. Live checks and recordings stay out of CI.
+For local discovery and `test:live`, coordinate human-paced reads per connector
+and upstream target across courts, local workers, sessions and iterations. Wait
+at least 10 seconds between requests and stay within 6 per rolling minute, 20
+per rolling 10 minutes and 30 per rolling hour. These are ceilings, not quotas.
+The CLI's `politeGate` applies its local caps; coordinate separate local
+processes so their combined activity stays within the same ceilings. Honor
+`Retry-After` and stop at a block or challenge. Local checks do not require
+production database access, production transactions, SSH access or worker
+leases. Deployed callers keep their existing budgets, admission, leases and
+backoff.
+Live checks and recordings stay out of CI.
 
 In Chrome or Brave, open DevTools before loading the page. In **Network**, turn
 on **Preserve log** and **Disable cache**, start with the Fetch/XHR filter and

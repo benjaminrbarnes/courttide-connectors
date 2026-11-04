@@ -14,12 +14,17 @@ The first request to a booking host must have no cookie. Observe only the public
 read flow; do not sign in, create an account or enter a booking flow. Stop at the
 first 403, 429 or challenge and never bypass it. Keep any captures private.
 
-Share a gate per connector and upstream target across courts, workers, clients
-and repeated test iterations. Leave at least 10 seconds between requests; allow
-at most 6 in a rolling minute, 20 in a rolling 10 minutes and 30 in a rolling
-hour. These are ceilings, not targets. Reuse authorized sessions and coordinate
-separate processes through existing admission, leases and backoff. Live checks
-never run in CI.
+For local discovery and `test:live`, coordinate human-paced reads per connector
+and upstream target across courts, local workers, sessions and repeated
+iterations. Leave at least 10 seconds between requests; allow at most 6 in a
+rolling minute, 20 in a rolling 10 minutes and 30 in a rolling hour. These are
+ceilings, not targets. The CLI's `politeGate` applies its local caps; coordinate
+separate local processes so their combined activity stays within the same
+ceilings. Honor `Retry-After` and stop at a block or challenge. Local checks do
+not require production database access, production transactions, SSH access or
+worker leases. Deployed callers retain their existing budgets, admission,
+leases and backoff. Live
+checks never run in CI.
 
 Before requesting review:
 
