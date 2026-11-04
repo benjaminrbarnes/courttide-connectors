@@ -320,6 +320,7 @@ export const TransportProfileSchema = z.strictObject({
   contentLengthChecks: z.boolean(),
   jsonContentTypes: z.array(z.string()),
   htmlContentTypes: z.array(z.string()),
+  classifyJsonForHtml: z.boolean().optional(),
   challenge: z
     .object({
       passiveAssets: z.array(z.string()),

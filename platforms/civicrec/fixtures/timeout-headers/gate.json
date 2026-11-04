@@ -15,7 +15,7 @@
       "ok": false,
       "error": "http_error",
       "retryAfterMs": null,
-      "retryable": true
+      "retryable": false
     }
   }
 ]
