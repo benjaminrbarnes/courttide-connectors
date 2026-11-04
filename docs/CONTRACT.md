@@ -251,8 +251,9 @@ shapes. New platform codes are documented by that platform and retain meaning.
 `@courttide/connectors/testing` exports `runConformance`, a scripted fake
 fetch, recording gate, frozen clock and the case matrix. The runner takes a
 platform and fixture directory and uses the shared runtime with the scripted
-fetch and a frozen wall and monotonic clock. An optional harness factory can instead receive the fake fetch, recording
-gate, tenant and clock and return an `HttpClient` and operation wrapper. The
+fetch and a controlled wall and monotonic clock. An optional harness factory can
+instead receive the fake fetch, recording gate, tenant and clock and return an
+`HttpClient` and operation wrapper. The
 wrapper lets a runtime release a per-read ticket after parsing. The default
 does not use a live network; an injected harness must use the supplied fake fetch.
 
@@ -261,7 +262,9 @@ configuration path, court and date range. It has `responses.json`,
 `requests.json`, `gate.json`, and exactly one of `expected.json` or
 `error.json`. Optional metadata declares allowed courts, marked synthetic
 secrets, a gate deferral, an identity operation or an expected reflected-secret
-failure. Public metadata has `"source": "synthetic"`; use the example config
+failure. An optional `clockSequence` contains 1 to 16 instants, returned in
+order for successive clock calls; later calls repeat the last instant. Without a
+sequence, the clock stays at `clockNow`. Public metadata has `"source": "synthetic"`; use the example config
 under `examples/tenants/` and keys from 900001 through 900099.
 
 The runner compares request URLs, headers, bodies and fetch options in order;
