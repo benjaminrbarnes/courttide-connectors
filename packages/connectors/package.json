@@ -29,6 +29,10 @@
       "types": "./dist/platforms/activenet/index.d.ts",
       "default": "./dist/platforms/activenet/index.js"
     },
+    "./civicrec": {
+      "types": "./dist/platforms/civicrec/index.d.ts",
+      "default": "./dist/platforms/civicrec/index.js"
+    },
     "./schema/tenant.schema.json": "./schema/tenant.schema.json"
   },
   "peerDependencies": {

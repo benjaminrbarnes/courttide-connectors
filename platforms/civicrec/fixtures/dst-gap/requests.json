@@ -1,0 +1,30 @@
+[
+  {
+    "url": "https://secure.rec1.com/XX/example-city/catalog",
+    "init": {
+      "method": "GET",
+      "headers": {
+        "accept": "text/html"
+      },
+      "credentials": "omit",
+      "redirect": "manual",
+      "cache": "no-store",
+      "signal": "present"
+    }
+  },
+  {
+    "url": "https://secure.rec1.com/XX/example-city/catalog/getFacilityHours/example-session/900003/900004/2026-03-08",
+    "init": {
+      "method": "GET",
+      "headers": {
+        "accept": "application/json",
+        "x-requested-with": "XMLHttpRequest",
+        "cookie": "ExampleSession=example-token"
+      },
+      "credentials": "omit",
+      "redirect": "manual",
+      "cache": "no-store",
+      "signal": "present"
+    }
+  }
+]

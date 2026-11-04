@@ -247,6 +247,45 @@ describe("contract schemas", () => {
     expect(readingSchema(context).safeParse(value).success).toBe(true);
   });
 
+  it("retains explicitly overlapping and duplicate reported ranges only", () => {
+    const value = reading();
+    const day = value.days[0]!;
+    day.coverage = "partial";
+    day.evidence = evidence;
+    day.intervals = [
+      {
+        start: "2026-11-04T08:00:00.000Z",
+        end: "2026-11-04T10:00:00.000Z",
+        available: true,
+      },
+      {
+        start: "2026-11-04T09:00:00.000Z",
+        end: "2026-11-04T11:00:00.000Z",
+        available: true,
+      },
+      {
+        start: "2026-11-04T08:00:00.000Z",
+        end: "2026-11-04T10:00:00.000Z",
+        available: true,
+      },
+    ];
+    const context = { ...fullContext, shape: "continuous_ranges" as const };
+    expect(readingSchema(context).parse(value).days[0]!.intervals).toEqual(
+      day.intervals,
+    );
+    day.intervals[0]!.available = false;
+    expect(readingSchema(context).safeParse(value).success).toBe(false);
+    day.intervals[0]!.available = true;
+    day.visibility = "unknown";
+    day.usable = false;
+    expect(readingSchema(context).safeParse(value).success).toBe(false);
+    day.visibility = "visible";
+    day.usable = true;
+    day.coverage = "complete";
+    day.evidence = undefined;
+    expect(readingSchema(fullContext).safeParse(value).success).toBe(false);
+  });
+
   it("rejects marked-secret echoes, oversize data and malformed timestamps without throwing", () => {
     const value = reading();
     value.sanitized = { value: "example-token" };

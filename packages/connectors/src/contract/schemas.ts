@@ -185,19 +185,27 @@ export const DayReadingSchema = z
       }
       parsed.push({ start, end, index });
     }
-    parsed.sort((left, right) =>
-      Temporal.Instant.compare(left.start, right.start),
-    );
-    for (let index = 1; index < parsed.length; index += 1) {
-      if (
-        Temporal.Instant.compare(parsed[index]!.start, parsed[index - 1]!.end) <
-        0
-      ) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["intervals", parsed[index]!.index],
-          message: "Intervals must not overlap",
-        });
+    const reportedRanges =
+      day.coverage === "partial" &&
+      day.evidence?.kind === "continuous_ranges" &&
+      day.intervals.every((interval) => interval.available);
+    if (!reportedRanges) {
+      parsed.sort((left, right) =>
+        Temporal.Instant.compare(left.start, right.start),
+      );
+      for (let index = 1; index < parsed.length; index += 1) {
+        if (
+          Temporal.Instant.compare(
+            parsed[index]!.start,
+            parsed[index - 1]!.end,
+          ) < 0
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["intervals", parsed[index]!.index],
+            message: "Intervals must not overlap",
+          });
+        }
       }
     }
   });

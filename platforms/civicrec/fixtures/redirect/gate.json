@@ -1,0 +1,21 @@
+[
+  {
+    "type": "acquire",
+    "request": {
+      "court": "900003",
+      "purpose": "bootstrap",
+      "method": "GET",
+      "url": "https://secure.rec1.com/XX/example-city/catalog"
+    }
+  },
+  {
+    "type": "release",
+    "ticket": 1,
+    "outcome": {
+      "ok": false,
+      "status": 302,
+      "error": "access_blocked",
+      "retryAfterMs": null
+    }
+  }
+]

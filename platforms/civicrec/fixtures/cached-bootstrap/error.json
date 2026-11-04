@@ -1,0 +1,6 @@
+{
+  "name": "ConnectorError",
+  "code": "schema_changed",
+  "retryable": false,
+  "retryAfterMs": null
+}

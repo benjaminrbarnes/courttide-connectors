@@ -77,7 +77,10 @@ the shape and key order of its sanitized output.
 visibility, coverage, `usable`, ordered reason codes and intervals. Each
 interval has a UTC start, end and `available` boolean. Starts belong to the
 day's local date; ends may reach the following local midnight. Intervals are
-positive and non-overlapping; touching is allowed. A usable
+positive. Full-calendar intervals do not overlap; touching is allowed. Partial
+reported ranges may preserve explicit overlaps or duplicates in source order;
+storage and matching may reject those ranges.
+A usable
 `continuous_ranges` day has the evidence below. A `full_calendar` day never
 has that evidence.
 
@@ -275,6 +278,7 @@ values. Header tuple arrays keep their order and duplicates. An already-created
 `Headers` object is recorded distinctly as `{kind: "Headers", entries: [...]}`
 using its observable entries. Synthetic response fixtures may use ordered
 header tuples for repeated fields and `bodyBytes` for exact byte sequences.
+`bodyRepeat` creates a bounded synthetic repeated-character body for size tests.
 
 The repository data check scans tracked text and the packed package for
 non-example identifiers, tenant and catalog paths, slugs, unmarked hashes,

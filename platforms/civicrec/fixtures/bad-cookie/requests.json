@@ -1,0 +1,15 @@
+[
+  {
+    "url": "https://secure.rec1.com/XX/example-city/catalog",
+    "init": {
+      "method": "GET",
+      "headers": {
+        "accept": "text/html"
+      },
+      "credentials": "omit",
+      "redirect": "manual",
+      "cache": "no-store",
+      "signal": "present"
+    }
+  }
+]
