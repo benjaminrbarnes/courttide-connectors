@@ -1,0 +1,7 @@
+[
+  {
+    "status": 200,
+    "headers": { "content-type": "application/json" },
+    "body": "{\"date\":\"2026-11-04\",\"start\":\"2026-11-04T08:00:00.000Z\",\"end\":\"2026-11-04T09:00:00.000Z\"}"
+  }
+]
