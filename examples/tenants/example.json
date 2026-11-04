@@ -1,0 +1,23 @@
+{
+  "$schema": "../../schema/tenant.schema.json",
+  "schemaVersion": "1",
+  "platform": "example",
+  "tenant": "exampleparks",
+  "timeZone": "UTC",
+  "origin": "https://example.invalid",
+  "params": {},
+  "parks": [
+    {
+      "key": "example-park",
+      "name": "Example Park",
+      "courttideSlug": "example-park",
+      "courts": [
+        {
+          "key": "900001",
+          "label": "Example Court",
+          "params": {}
+        }
+      ]
+    }
+  ]
+}

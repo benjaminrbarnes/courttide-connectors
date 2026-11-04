@@ -13,13 +13,23 @@
     "directory": "packages/connectors"
   },
   "files": [
-    "dist"
+    "dist",
+    "schema"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    },
+    "./schema/tenant.schema.json": "./schema/tenant.schema.json"
+  },
+  "peerDependencies": {
+    "@js-temporal/polyfill": "0.5.1",
+    "zod": "4.6.7"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

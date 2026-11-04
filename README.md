@@ -3,6 +3,9 @@
 Open-source, read-only connectors for court availability. This package is being
 set up; no platforms are available yet.
 
+The [connector contract](docs/CONTRACT.md) describes the interfaces, synthetic
+conformance kit and data rules.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and the

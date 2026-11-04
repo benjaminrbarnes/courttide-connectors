@@ -3,6 +3,8 @@
 Open-source, read-only connectors for court availability. This package is being
 set up; no platforms are available yet.
 
+See the [connector contract](https://github.com/benjaminrbarnes/courttide-connectors/blob/main/docs/CONTRACT.md) for the interfaces and conformance kit.
+
 When you display data, please keep its `attribution` field and include:
 
 Court times read with [courttide-connectors](https://github.com/benjaminrbarnes/courttide-connectors) by [CourtTide](https://courttide.com).

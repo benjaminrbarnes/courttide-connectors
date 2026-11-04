@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "type": "string", "const": "1" },
+    "platform": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "tenant": { "type": "string", "minLength": 1 },
+    "timeZone": {
+      "type": "string",
+      "pattern": "^(?:UTC|[A-Za-z_]+(?:\\/[A-Za-z0-9_+-]+)+)$"
+    },
+    "origin": { "type": "string", "pattern": "^https?:\\/\\/[^/@?#]+$" },
+    "params": {},
+    "parks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "courttideSlug": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "publicTimes": { "type": "boolean" },
+          "courts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": { "type": "string", "minLength": 1 },
+                "label": { "type": "string", "minLength": 1 },
+                "platformLabel": { "type": "string", "minLength": 1 },
+                "retired": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                },
+                "params": {}
+              },
+              "required": ["key", "label", "params"],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": ["key", "name", "courts"],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "platform",
+    "tenant",
+    "timeZone",
+    "origin",
+    "params",
+    "parks"
+  ],
+  "additionalProperties": {}
+}

@@ -1,0 +1,5 @@
+{
+  "extends": "./packages/connectors/tsconfig.json",
+  "compilerOptions": { "rootDir": "." },
+  "include": ["packages/connectors/src/**/*.ts", "tests/**/*.ts"]
+}
