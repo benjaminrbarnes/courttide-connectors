@@ -120,7 +120,8 @@ the Zod schema for that check too.
 or `metadata`), method and URL. It returns a ticket or throws. A failed acquire
 is never followed by release. `Gate.release` receives that ticket once and the
 final outcome: `ok`, optional status, an error code when not ok, and optional
-retry delay.
+retry delay and retryability. For a failed `ConnectorError`, the runtime passes
+its `retryable` value through rather than inferring it from the status or code.
 
 The injected `HttpClient.request` receives court, purpose, GET or read-only
 POST, URL, allowed headers, optional string body and expected JSON or HTML. It
@@ -255,6 +256,8 @@ fetch and a frozen wall and monotonic clock. An optional harness factory can ins
 gate, tenant and clock and return an `HttpClient` and operation wrapper. The
 wrapper lets a runtime release a per-read ticket after parsing. The default
 does not use a live network; an injected harness must use the supplied fake fetch.
+The testing entrypoint also exports `parseCivicrecHours` and its types for
+parser-only parity cases. Keep real inputs and their parser results private.
 
 Each case directory contains `meta.json` with a source, case names, `clockNow`,
 configuration path, court and date range. It has `responses.json`,
