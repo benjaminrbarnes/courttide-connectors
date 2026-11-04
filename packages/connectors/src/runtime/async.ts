@@ -1,3 +1,22 @@
+import { ConnectorError } from "../contract/errors.js";
+import type { TransportProfile } from "../contract/types.js";
+
+/** Only caller-approved transport controls can cross a raw fetch/read failure. */
+export function transportFailure(
+  error: unknown,
+  signal: AbortSignal,
+  profile: TransportProfile,
+): unknown {
+  const classified = profile.classifyTransportError?.(error);
+  if (classified !== undefined) return classified;
+  return profile.transportErrors === "http-only"
+    ? new ConnectorError(
+        "http_error",
+        isTimeoutError(error, signal, profile.abortRetryable),
+      )
+    : error;
+}
+
 export function bounded<T>(
   operation: Promise<T>,
   signal: AbortSignal,

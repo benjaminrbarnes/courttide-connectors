@@ -1,6 +1,7 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
 import { ATTRIBUTION } from "./constants.js";
+import type { ConnectorError } from "./errors.js";
 
 export const LocalDateSchema = z.iso.date();
 export const InstantSchema = z.iso.datetime();
@@ -320,6 +321,12 @@ export const TransportProfileSchema = z.strictObject({
   timeoutReason: z.enum(["timeout-error", "abort-error"]).optional(),
   abortFailure: z.enum(["reason", "retryable-http"]).optional(),
   cleanupAbort: z.enum(["before-body", "after-body", "none"]).optional(),
+  transportErrors: z.enum(["preserve", "http-only"]).optional(),
+  classifyTransportError: z
+    .custom<(error: unknown) => ConnectorError | undefined>(
+      (value) => typeof value === "function",
+    )
+    .optional(),
   redirectHeaders: z.array(z.string()),
   contentLengthChecks: z.boolean(),
   jsonContentTypes: z.array(z.string()),

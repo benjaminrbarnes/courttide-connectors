@@ -4,6 +4,7 @@
 
 - Preserve native ActiveNet timeout signals and CivicRec cancellation reasons.
 - Classify CivicRec cancellation as a retryable HTTP failure and abort before body disposal.
+- Keep raw transport failures separate from classifier errors, with a caller-owned error mapping seam.
 
 ## 0.1.0
 

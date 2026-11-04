@@ -14,7 +14,7 @@ import type {
   TenantConfig,
   TransportProfile,
 } from "../contract/types.js";
-import { bounded, isTimeoutError } from "./async.js";
+import { bounded, isTimeoutError, transportFailure } from "./async.js";
 import { parseCookieJar } from "./cookies.js";
 import { snapshotRequest } from "./request.js";
 import { processResponse } from "./response.js";
@@ -269,15 +269,20 @@ export function createConnectorRuntime(
         options.profile.fetchInput === "string"
           ? request.url.href
           : request.url;
-      const fetching = options.fetch(url, {
-        method: request.method,
-        headers: request.headers,
-        ...(request.body === undefined ? {} : { body: request.body }),
-        credentials: "omit",
-        redirect: "manual",
-        cache: "no-store",
-        signal,
-      });
+      let fetching: Promise<Response>;
+      try {
+        fetching = options.fetch(url, {
+          method: request.method,
+          headers: request.headers,
+          ...(request.body === undefined ? {} : { body: request.body }),
+          credentials: "omit",
+          redirect: "manual",
+          cache: "no-store",
+          signal,
+        });
+      } catch (error) {
+        throw transportFailure(error, signal, options.profile);
+      }
       void fetching
         .then(
           async (late) => {
@@ -286,7 +291,11 @@ export function createConnectorRuntime(
           () => {},
         )
         .catch(() => {});
-      response = await bounded(fetching, signal, abortError);
+      try {
+        response = await bounded(fetching, signal, abortError);
+      } catch (error) {
+        throw transportFailure(error, signal, options.profile);
+      }
       if (!(response instanceof Response))
         throw new ConnectorError("schema_changed");
       status = response.status;
