@@ -43,7 +43,8 @@ requires an explicit live flag and one court key. The span is limited to the
 platform's `maxDaysPerRead`. Text output shows each date's status, visibility,
 coverage, usability and open windows, followed by the CourtTide credit line.
 JSON output goes to standard output and sends that credit line to standard
-error. CourtTide's public MCP is planned for multi-park reads.
+error. For saved times across parks, use
+[CourtTide's keyed MCP](https://courttide.com/docs/agents).
 
 `serve <fixture-dir>` binds only to `127.0.0.1`. Pass one fixture case directory
 to avoid ambiguous routes. It serves synthetic request/response pairs and does

@@ -162,7 +162,26 @@ describe("connector CLI", () => {
     );
     expect(multi).toBe(1);
     expect(output.err.join("\n")).toContain(
-      "public MCP for many parks is planned",
+      "use CourtTide's keyed MCP for saved times across parks: https://courttide.com/docs/agents",
+    );
+    const joinedOutput = io();
+    const joined = await runCli(
+      [
+        "read",
+        "activenet",
+        "--config",
+        config,
+        "--court",
+        "900001,900002",
+        "--date",
+        "2026-10-31",
+        "--live",
+      ],
+      joinedOutput.value,
+    );
+    expect(joined).toBe(1);
+    expect(joinedOutput.err.join("\n")).toContain(
+      "use CourtTide's keyed MCP for saved times across parks: https://courttide.com/docs/agents",
     );
     const unsafe = await runCli(
       [

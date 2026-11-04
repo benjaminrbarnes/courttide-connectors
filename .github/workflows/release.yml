@@ -1,0 +1,84 @@
+name: Release package
+
+on:
+  push:
+    tags:
+      - "connectors-v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify release source
+        run: |
+          git fetch origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          test -s docs/RESPONSE-SHAPES.md
+          test -s docs/TENANT-CONFIG.md
+          test -s platforms/_template/conformance.test.ts
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - name: Pack, validate and scan the release asset
+        run: |
+          TASK_RELEASE_DIR="$RUNNER_TEMP/connectors-release"
+          mkdir -p "$TASK_RELEASE_DIR"
+          npm pack --ignore-scripts --json --workspace @courttide/connectors --pack-destination "$TASK_RELEASE_DIR" > "$TASK_RELEASE_DIR/pack.json"
+          node scripts/prepare-release.mjs "$GITHUB_REF_NAME" "$TASK_RELEASE_DIR/pack.json" "$TASK_RELEASE_DIR"
+          TASK_ARCHIVE_PATH="$(node -e 'const p=require(process.argv[1]); process.stdout.write(require("node:path").join(process.argv[2],p[0].filename))' "$TASK_RELEASE_DIR/pack.json" "$TASK_RELEASE_DIR")"
+          npm run check:no-court-data -- "$TASK_ARCHIVE_PATH"
+      - name: Install the exact package into an empty project
+        run: |
+          TASK_RELEASE_DIR="$RUNNER_TEMP/connectors-release"
+          TASK_ARCHIVE_PATH="$(node -e 'const p=require(process.argv[1]); process.stdout.write(require("node:path").join(process.argv[2],p[0].filename))' "$TASK_RELEASE_DIR/pack.json" "$TASK_RELEASE_DIR")"
+          TASK_SMOKE_DIR="$(mktemp -d)"
+          trap 'rm -r "$TASK_SMOKE_DIR"' EXIT
+          printf '%s\n' '{"name":"example-consumer","version":"0.0.0","private":true,"type":"module"}' > "$TASK_SMOKE_DIR/package.json"
+          cd "$TASK_SMOKE_DIR"
+          npm install --ignore-scripts --no-audit --no-fund "$TASK_ARCHIVE_PATH" 'zod@4.6.7' '@js-temporal/polyfill@0.5.1'
+          node --input-type=module -e 'await import("@courttide/connectors/activenet"); await import("@courttide/connectors/civicrec"); await import("@courttide/connectors/testing"); await import("@courttide/connectors/schema/tenant.schema.json", { with: { type: "json" } });'
+          ./node_modules/.bin/courttide-connectors --help | grep -q '^Usage:'
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TASK_RELEASE_DIR="$RUNNER_TEMP/connectors-release"
+          TASK_ARCHIVE_PATH="$(node -e 'const p=require(process.argv[1]); process.stdout.write(require("node:path").join(process.argv[2],p[0].filename))' "$TASK_RELEASE_DIR/pack.json" "$TASK_RELEASE_DIR")"
+          gh release create "$GITHUB_REF_NAME" "$TASK_ARCHIVE_PATH" "$TASK_RELEASE_DIR/SHA256SUMS.txt" "$TASK_RELEASE_DIR/INTEGRITY.txt" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$TASK_RELEASE_DIR/RELEASE-NOTES.md"
+          test "$(gh release view "$GITHUB_REF_NAME" --json isImmutable --jq .isImmutable)" = true
+      - name: Check npm publishing configuration
+        id: npm_token
+        env:
+          TASK_NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$TASK_NPM_TOKEN" ]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.npm_token.outputs.configured == 'true'
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Publish to npm when configured
+        if: steps.npm_token.outputs.configured == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          TASK_RELEASE_DIR="$RUNNER_TEMP/connectors-release"
+          TASK_ARCHIVE_PATH="$(node -e 'const p=require(process.argv[1]); process.stdout.write(require("node:path").join(process.argv[2],p[0].filename))' "$TASK_RELEASE_DIR/pack.json" "$TASK_RELEASE_DIR")"
+          npm publish "$TASK_ARCHIVE_PATH" --ignore-scripts --provenance --access public

@@ -169,14 +169,14 @@ export function parseReadOptions(parsed: ParsedArgs): ReadOptions {
     );
   if ((parsed.values.get("court") ?? []).length > 1)
     throw new Error(
-      "read accepts one court only; CourtTide's public MCP for many parks is planned",
+      "read accepts one court only; use CourtTide's keyed MCP for saved times across parks: https://courttide.com/docs/agents",
     );
   const platform = parsed.positional[0]!;
   const config = singleOption(parsed.values, "config", true)!;
   const court = singleOption(parsed.values, "court", true)!;
   if (court.includes(","))
     throw new Error(
-      "read accepts one court only; CourtTide's public MCP for many parks is planned",
+      "read accepts one court only; use CourtTide's keyed MCP for saved times across parks: https://courttide.com/docs/agents",
     );
   const date = singleOption(parsed.values, "date", true)!;
   const daysText = singleOption(parsed.values, "days");

@@ -13,8 +13,7 @@
     "directory": "packages/connectors"
   },
   "files": [
-    "dist",
-    "schema"
+    "dist"
   ],
   "bin": {
     "courttide-connectors": "./dist/cli/main.js"
@@ -36,13 +35,13 @@
       "types": "./dist/platforms/civicrec/index.d.ts",
       "default": "./dist/platforms/civicrec/index.js"
     },
-    "./schema/tenant.schema.json": "./schema/tenant.schema.json"
+    "./schema/tenant.schema.json": "./dist/schema/tenant.schema.json"
   },
   "peerDependencies": {
     "@js-temporal/polyfill": "0.5.1",
     "zod": "4.6.7"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json && node ../../scripts/copy-package-schema.mjs"
   }
 }

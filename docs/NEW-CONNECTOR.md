@@ -68,6 +68,8 @@ Only generic shapes and invented examples belong in this repository.
    `platforms/<id>/README.md` headed `# Display Name platform` or
    `# Display Name connector`. Describe calls, response shape, statuses, time
    rules, reason codes and transport profile without tenant or court details.
+   Register the platform and its fixture path as described in the
+   [CLI guide](CLI.md).
 5. Add an invented config under `examples/tenants/`, using the reserved keys
    and `example-` slugs, and update each fixture's `configPath` to point to it.
    The synthetic `tenant` value must be exactly `example`, `exampleparks` or
