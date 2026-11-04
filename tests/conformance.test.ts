@@ -480,6 +480,23 @@ describe("conformance kit", () => {
     ]);
   });
 
+  it("constructs bounded synthetic repeated bodies", async () => {
+    const fake = createFakeFetch([
+      { bodyRepeat: { value: "x", count: 3 } },
+      { bodyRepeat: { value: "x", count: 2 * 1024 * 1024 + 1 } },
+      { bodyRepeat: { value: "xy", count: 3 } },
+    ]);
+    expect(await (await fake.fetch("https://example.invalid/")).text()).toBe(
+      "xxx",
+    );
+    await expect(fake.fetch("https://example.invalid/")).rejects.toThrow(
+      "Invalid synthetic repeated body",
+    );
+    await expect(fake.fetch("https://example.invalid/")).rejects.toThrow(
+      "Invalid synthetic repeated body",
+    );
+  });
+
   it("requires every case or an explicit reason", () => {
     expect(() =>
       assertCaseMatrix(["open_interval"], notApplicable),

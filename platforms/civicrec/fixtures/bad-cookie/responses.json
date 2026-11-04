@@ -1,0 +1,13 @@
+[
+  {
+    "status": 200,
+    "headers": [
+      ["content-type", "text/html"],
+      [
+        "set-cookie",
+        "ExampleSession=example-token; Domain=other.invalid; Path=/"
+      ]
+    ],
+    "body": "<div data-page-data='{\"checkoutData\":{\"user\":null,\"key\":\"example-session\"}}' data-base-path='/XX/example-city/'></div>"
+  }
+]

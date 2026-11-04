@@ -12,6 +12,7 @@ export interface FakeResponse {
   headers?: HeadersInit;
   body?: string | null;
   bodyBytes?: number[];
+  bodyRepeat?: { value: string; count: number };
   redirected?: boolean;
   failure?: "timeout" | "network";
   bodyFailure?: "timeout" | "network";
@@ -69,9 +70,12 @@ export function createFakeFetch(responses: readonly FakeResponse[]): FakeFetch {
     if (!response) throw new Error("Unexpected synthetic request");
     if (response.failure) throw failure(response.failure);
     if (
-      [response.body, response.bodyBytes, response.bodyFailure].filter(
-        (value) => value !== undefined,
-      ).length > 1
+      [
+        response.body,
+        response.bodyBytes,
+        response.bodyRepeat,
+        response.bodyFailure,
+      ].filter((value) => value !== undefined).length > 1
     )
       throw new Error("Synthetic response has multiple body forms");
     if (
@@ -80,6 +84,18 @@ export function createFakeFetch(responses: readonly FakeResponse[]): FakeFetch {
       )
     )
       throw new Error("Invalid synthetic response bytes");
+    if (
+      response.bodyRepeat !== undefined &&
+      (response.bodyRepeat === null ||
+        typeof response.bodyRepeat !== "object" ||
+        Array.isArray(response.bodyRepeat) ||
+        typeof response.bodyRepeat.value !== "string" ||
+        response.bodyRepeat.value.length !== 1 ||
+        !Number.isInteger(response.bodyRepeat.count) ||
+        response.bodyRepeat.count < 0 ||
+        response.bodyRepeat.count > 2 * 1024 * 1024)
+    )
+      throw new Error("Invalid synthetic repeated body");
     const body = response.bodyFailure
       ? new ReadableStream({
           start(controller) {
@@ -88,7 +104,9 @@ export function createFakeFetch(responses: readonly FakeResponse[]): FakeFetch {
         })
       : response.bodyBytes !== undefined
         ? new Uint8Array(response.bodyBytes)
-        : (response.body ?? null);
+        : response.bodyRepeat !== undefined
+          ? response.bodyRepeat.value.repeat(response.bodyRepeat.count)
+          : (response.body ?? null);
     const result = new Response(body, {
       status: response.status ?? 200,
       headers: response.headers,

@@ -1,0 +1,75 @@
+{
+  "platform": "civicrec",
+  "tenant": "XX/example-city",
+  "court": "900003",
+  "startDate": "2026-11-04",
+  "endDate": "2026-11-04",
+  "complete": true,
+  "observedAt": "2026-11-04T12:00:00.000Z",
+  "sourceUrl": "https://secure.rec1.com/XX/example-city/catalog",
+  "days": [
+    {
+      "date": "2026-11-04",
+      "observedAt": "2026-11-04T12:00:00Z",
+      "status": 200,
+      "visibility": "visible",
+      "coverage": "partial",
+      "usable": true,
+      "reasonCodes": ["reported_ranges_only"],
+      "intervals": [
+        {
+          "start": "2026-11-04T21:00:00Z",
+          "end": "2026-11-04T22:00:00Z",
+          "available": true
+        }
+      ],
+      "evidence": {
+        "kind": "continuous_ranges",
+        "scope": "reported_ranges_only",
+        "startIncrementMinutes": 15,
+        "startAnchor": "range_start",
+        "minimumOccupiedMinutes": 60,
+        "durationStepMinutes": 15,
+        "maximumOccupiedMinutes": 120
+      }
+    }
+  ],
+  "sanitized": {
+    "resource_id": "900003",
+    "days": [
+      {
+        "date": "2026-11-04",
+        "visibility": "visible",
+        "coverage": "partial",
+        "usable": true,
+        "reason_codes": ["reported_ranges_only"],
+        "intervals": [
+          {
+            "start": "2026-11-04T21:00:00Z",
+            "end": "2026-11-04T22:00:00Z",
+            "available": true
+          }
+        ],
+        "availability_evidence": {
+          "kind": "continuous_ranges",
+          "scope": "reported_ranges_only",
+          "start_increment_minutes": 15,
+          "start_anchor": "range_start",
+          "minimum_occupied_minutes": 60,
+          "duration_step_minutes": 15,
+          "maximum_occupied_minutes": 120
+        }
+      }
+    ]
+  },
+  "parser": {
+    "id": "civicrec-anonymous",
+    "version": "civicrec-hours-1",
+    "signature": "civicrec-hours-v1"
+  },
+  "attribution": {
+    "text": "Read with courttide-connectors by CourtTide",
+    "url": "https://courttide.com",
+    "parkUrl": "https://courttide.com/courts/example-park"
+  }
+}

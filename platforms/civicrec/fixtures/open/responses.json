@@ -1,0 +1,17 @@
+[
+  {
+    "status": 200,
+    "headers": [
+      ["content-type", "text/html"],
+      ["set-cookie", "ExampleSession=example-token; Path=/; Secure"]
+    ],
+    "body": "<div data-page-data='{\"checkoutData\":{\"user\":null,\"key\":\"example-session\"}}' data-base-path='/XX/example-city/'></div>"
+  },
+  {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"hours\":[{\"start\":1793779200,\"end\":1793786400,\"startDtm\":\"2026-11-04 08:00:00\",\"endDtm\":\"2026-11-04 10:00:00\",\"fragment\":false,\"block\":false,\"rateType\":{\"id\":\"900004\"}}],\"displayHours\":[{\"start\":1793779200,\"end\":1793786400,\"startDtm\":\"2026-11-04 08:00:00\",\"endDtm\":\"2026-11-04 10:00:00\",\"fragment\":false,\"block\":false,\"rateType\":{\"id\":\"900004\"}}],\"availableForRate\":true}"
+  }
+]

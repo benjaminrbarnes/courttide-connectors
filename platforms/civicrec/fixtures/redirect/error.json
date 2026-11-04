@@ -1,0 +1,6 @@
+{
+  "name": "ConnectorError",
+  "code": "access_blocked",
+  "retryable": false,
+  "retryAfterMs": null
+}

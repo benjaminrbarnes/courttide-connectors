@@ -1,0 +1,12 @@
+{
+  "source": "synthetic",
+  "cases": ["fall_back_ambiguity"],
+  "clockNow": "2026-11-04T12:00:00.000Z",
+  "configPath": "../../../../examples/tenants/civicrec-dst.json",
+  "court": "900003",
+  "range": {
+    "start": "2026-11-01",
+    "end": "2026-11-01"
+  },
+  "secrets": ["example-session", "example-token"]
+}
