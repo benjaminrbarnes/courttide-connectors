@@ -1,0 +1,6 @@
+{
+  "name": "ConnectorError",
+  "code": "http_error",
+  "retryable": true,
+  "retryAfterMs": null
+}

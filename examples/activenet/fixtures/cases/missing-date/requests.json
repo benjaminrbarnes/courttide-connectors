@@ -1,0 +1,15 @@
+[
+  {
+    "url": "https://example.activecommunities.com/exampleparks/rest/reservation/resource/availability/daily/900001?start_date=2026-01-02&end_date=2026-01-03&customer_id=0&company_id=0&locale=en-US",
+    "init": {
+      "method": "GET",
+      "headers": {
+        "accept": "application/json"
+      },
+      "credentials": "omit",
+      "redirect": "manual",
+      "cache": "no-store",
+      "signal": "present"
+    }
+  }
+]

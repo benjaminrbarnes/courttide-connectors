@@ -1,0 +1,6 @@
+{
+  "name": "ConnectorError",
+  "code": "invalid_interval",
+  "retryable": false,
+  "retryAfterMs": null
+}

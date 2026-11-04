@@ -1,0 +1,9 @@
+[
+  {
+    "status": 429,
+    "headers": {
+      "retry-after": "not-a-date"
+    },
+    "body": ""
+  }
+]

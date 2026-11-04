@@ -1,0 +1,15 @@
+[
+  {
+    "url": "https://example.activecommunities.com/exampleparks/rest/reservation/resource/detail/900001",
+    "init": {
+      "method": "GET",
+      "headers": {
+        "accept": "application/json"
+      },
+      "credentials": "omit",
+      "redirect": "manual",
+      "cache": "no-store",
+      "signal": "present"
+    }
+  }
+]

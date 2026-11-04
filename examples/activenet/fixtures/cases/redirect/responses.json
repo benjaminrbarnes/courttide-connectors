@@ -1,0 +1,9 @@
+[
+  {
+    "status": 302,
+    "headers": {
+      "location": "https://example.activecommunities.com/exampleparks/redirected"
+    },
+    "body": ""
+  }
+]

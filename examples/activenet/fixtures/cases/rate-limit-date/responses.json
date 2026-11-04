@@ -1,0 +1,9 @@
+[
+  {
+    "status": 429,
+    "headers": {
+      "retry-after": "Fri, 02 Jan 2026 12:01:00 GMT"
+    },
+    "body": ""
+  }
+]

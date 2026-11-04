@@ -1,0 +1,43 @@
+{
+  "platform": "activenet",
+  "tenant": "exampleparks",
+  "court": "900001",
+  "startDate": "2026-01-02",
+  "endDate": "2026-01-02",
+  "complete": false,
+  "sourceUrl": "https://example.activecommunities.com/exampleparks/rest/reservation/resource/availability/daily/900001?start_date=2026-01-02&end_date=2026-01-02&customer_id=0&company_id=0&locale=en-US",
+  "days": [
+    {
+      "date": "2026-01-02",
+      "status": 42,
+      "visibility": "unknown",
+      "coverage": "invalid",
+      "usable": false,
+      "reasonCodes": ["unknown_source_status", "range_incomplete"],
+      "intervals": []
+    }
+  ],
+  "sanitized": {
+    "resource_id": 900001,
+    "daily_details": [
+      {
+        "date": "2026-01-02",
+        "status": 42,
+        "check_in_only": false,
+        "check_out_only": false,
+        "times": []
+      }
+    ]
+  },
+  "observedAt": "2026-01-02T12:00:00.000Z",
+  "parser": {
+    "id": "iparcs-anonymous",
+    "version": "iparcs-1.2",
+    "signature": "iparcs-calendar-v1"
+  },
+  "attribution": {
+    "text": "Read with courttide-connectors by CourtTide",
+    "url": "https://courttide.com",
+    "parkUrl": "https://courttide.com/courts/example-park"
+  }
+}
