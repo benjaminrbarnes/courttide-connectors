@@ -239,7 +239,8 @@ non-example identifiers, tenant and catalog paths, slugs, unmarked hashes,
 non-synthetic fixture metadata and private references. It does not replace a
 review of the actual diff and packaged contents. Synthetic JSON objects that
 include a real-shaped `detailsTextSha256` mark it with a sibling
-`detailsTextSha256Synthetic: true`.
+`detailsTextSha256Synthetic: true`. YAML may instead use a `# synthetic`
+comment on the hash line.
 
 The matrix covers open, explicit taken, gap and touching intervals; closed,
 booked, hidden and unknown days; identity and date mismatches; valid DST,

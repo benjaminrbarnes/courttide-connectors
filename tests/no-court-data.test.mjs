@@ -148,6 +148,13 @@ describe("repository data check", () => {
         "unmarked hash",
       ]),
     );
+    const yamlHash = [hashField, ": ", hash].join("");
+    expect(
+      inspectText("examples/tenants/example.yaml", `${yamlHash} # synthetic`),
+    ).toEqual([]);
+    expect(inspectText("examples/tenants/example.yaml", yamlHash)).toContain(
+      "unmarked hash",
+    );
     expect(
       inspectText(
         "docs/sample.json",

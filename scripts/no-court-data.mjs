@@ -11,7 +11,7 @@ const privateReferences = [
 ];
 
 const literalFields =
-  /\b(court|courtKey|courtId|court_key|court_id|court-id|resourceId|resource_id|resource-id|externalResourceId|external_resource_id|external-resource-id|facilityId|facility_id|facility-id|rateTypeId|rate_type_id|rate-type-id|groupId|group_id|group-id|locationId|location_id|location-id|tenant|tenantKey|courttideSlug|courttide_slug|parkSlug|slug|catalogPath|basePath|detailsTextSha256)["']?\s*[:=]\s*(?:["']([^"']*)["']|(\d+))/gi;
+  /\b(court|courtKey|courtId|court_key|court_id|court-id|resourceId|resource_id|resource-id|externalResourceId|external_resource_id|external-resource-id|facilityId|facility_id|facility-id|rateTypeId|rate_type_id|rate-type-id|groupId|group_id|group-id|locationId|location_id|location-id|tenant|tenantKey|courttideSlug|courttide_slug|parkSlug|slug|catalogPath|basePath|detailsTextSha256)["']?\s*[:=]\s*(?:["']([^"']*)["']|(\d+)(?!\w))/gi;
 const yamlFields =
   /^\s*(court|courtKey|courtId|court_key|court_id|resourceId|resource_id|externalResourceId|external_resource_id|facilityId|facility_id|rateTypeId|rate_type_id|groupId|group_id|locationId|location_id|tenant|tenantKey|courttideSlug|courttide_slug|parkSlug|slug|catalogPath|basePath|detailsTextSha256)\s*:\s*([\w./:-]+)\s*(?:#.*)?$/gim;
 
@@ -268,7 +268,11 @@ export function inspectText(path, text) {
     const value = match[2] ?? match[3];
     if (match[1].toLowerCase() === "detailstextsha256" && data !== undefined)
       continue;
-    inspectField(match[1], value, findings);
+    const endOfLine = text.indexOf("\n", match.index);
+    const line = text.slice(match.index, endOfLine < 0 ? undefined : endOfLine);
+    const syntheticHash =
+      /\.ya?ml$/i.test(path) && /\s#\s*synthetic(?:\s|$)/i.test(line);
+    inspectField(match[1], value, findings, syntheticHash);
   }
 
   if (
