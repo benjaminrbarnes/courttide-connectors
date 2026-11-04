@@ -1,0 +1,27 @@
+{
+  "name": "@courttide/connectors",
+  "version": "0.1.0",
+  "description": "Read-only connectors for court availability",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benjaminrbarnes/courttide-connectors.git",
+    "directory": "packages/connectors"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+local/
+*.har
+.env*
+*.tgz
+.DS_Store

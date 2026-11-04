@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use courttide-connectors, please cite it as below."
+title: "courttide-connectors"
+type: software
+authors:
+  - name: "CourtTide"
+    website: "https://courttide.com"
+  - family-names: "Barnes"
+    given-names: "Benjamin"
+repository-code: "https://github.com/benjaminrbarnes/courttide-connectors"
+url: "https://courttide.com"
+license: MIT
