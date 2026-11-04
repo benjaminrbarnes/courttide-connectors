@@ -240,6 +240,77 @@ describe("legacy response classification", () => {
     }
   });
 
+  it("marks non-aborted fetch and stream timeout errors non-retryable for the any-abort profile", async () => {
+    for (const kind of ["fetch", "stream", "ordinary"] as const) {
+      const recording = createRecordingGate();
+      const failure = new Error("example-sensitive");
+      if (kind !== "ordinary") failure.name = "TimeoutError";
+      const client = runtime(
+        civicTenant,
+        civicRecLegacyProfile,
+        recording.gate,
+        async () => {
+          if (kind !== "stream") throw failure;
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(failure);
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          );
+        },
+      );
+      await expect(
+        client.execute(() => client.http.request(civicRequest())),
+      ).rejects.toMatchObject({ code: "http_error", retryable: false });
+      expect(recording.calls).toHaveLength(2);
+      expect(recording.calls.at(-1)).toEqual({
+        type: "release",
+        ticket: 1,
+        outcome: {
+          ok: false,
+          ...(kind === "stream" ? { status: 200 } : {}),
+          error: "http_error",
+          retryAfterMs: null,
+          retryable: false,
+        },
+      });
+    }
+  });
+
+  it("marks an actual signal abort retryable for the any-abort profile", async () => {
+    const recording = createRecordingGate();
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>(() => new Promise(() => {}));
+    const client = runtime(
+      civicTenant,
+      civicRecLegacyProfile,
+      recording.gate,
+      fetcher,
+      {
+        signal: controller.signal,
+      },
+    );
+    const pending = client.execute(() => client.http.request(civicRequest()));
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({
+      code: "http_error",
+      retryable: true,
+    });
+    expect(recording.calls.at(-1)).toEqual({
+      type: "release",
+      ticket: 1,
+      outcome: {
+        ok: false,
+        error: "http_error",
+        retryAfterMs: null,
+        retryable: true,
+      },
+    });
+  });
+
   it("sanitizes transport failures and preserves only typed error controls", async () => {
     for (const [original, code, retryable, delay] of [
       [new Error("example-sensitive"), "http_error", false, null],
@@ -276,7 +347,7 @@ describe("legacy response classification", () => {
       expect(JSON.stringify(error)).not.toContain("example-sensitive");
       expect(recording.calls.at(-1)).toMatchObject({
         type: "release",
-        outcome: { ok: false, error: code, retryAfterMs: delay },
+        outcome: { ok: false, error: code, retryAfterMs: delay, retryable },
       });
     }
     for (const timeout of [false, true]) {
@@ -492,6 +563,7 @@ describe("legacy response classification", () => {
         status: 200,
         error: "access_blocked",
         retryAfterMs: null,
+        retryable: false,
       },
     });
   });
@@ -589,7 +661,12 @@ describe("legacy response classification", () => {
     expect(recording.calls.at(-1)).toEqual({
       type: "release",
       ticket: 1,
-      outcome: { ok: false, error: "http_error", retryAfterMs: null },
+      outcome: {
+        ok: false,
+        error: "http_error",
+        retryAfterMs: null,
+        retryable: true,
+      },
     });
     const cancel = vi.fn();
     resolveFetch(new Response(new ReadableStream({ cancel })));

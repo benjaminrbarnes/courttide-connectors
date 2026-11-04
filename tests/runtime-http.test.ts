@@ -43,6 +43,7 @@ describe("runtime request and lease behavior", () => {
       contentLengthChecks: true,
       jsonContentTypes: ["application/json", "text/json"],
       htmlContentTypes: ["text/html"],
+      classifyJsonForHtml: true,
       challenge: { scope: "all" },
     });
     const recording = createRecordingGate();
@@ -139,6 +140,7 @@ describe("runtime request and lease behavior", () => {
           status: 200,
           error: "access_blocked",
           retryAfterMs: null,
+          retryable: false,
         },
       },
     ]);
@@ -176,6 +178,7 @@ describe("runtime request and lease behavior", () => {
         status: 200,
         error: "schema_changed",
         retryAfterMs: null,
+        retryable: false,
       },
     });
   });

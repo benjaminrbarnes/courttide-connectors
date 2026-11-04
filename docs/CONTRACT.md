@@ -166,6 +166,10 @@ its row limit, byte limit, partition and secure-prefix rules are fixed.
 Classification order controls when a successful response's body is read. Error
 statuses are classified and their bodies cancelled unread in all profiles.
 Unsupported profile fields are rejected.
+An optional `classifyJsonForHtml` policy lets the transport parse and classify
+declared JSON before releasing an HTML-expected request. The caller still
+enforces its expected HTML type after release; without the policy, unexpected
+JSON is rejected before release.
 
 Existing profiles retain their platform behavior:
 
@@ -208,9 +212,12 @@ first rejects `response.redirected` and leaves non-200 bodies unread. For a 200,
 it checks Content-Length, reads the bounded body, checks unencoded length, then
 decodes fatal UTF-8 before checking Location, Refresh, content type and payload.
 An empty HTML body reaches the bootstrap parser after a successful per-request
-release. This preserves the existing order for compound failures. CivicRec also
-treats an externally aborted request as retryable; ActiveNet and the default
-profile retry only timeout-like failures.
+release. JSON bootstrap responses are classified before release, then a valid
+JSON response is rejected by the reader's HTML type check after release. This
+preserves the existing order for compound failures. CivicRec marks a transport
+failure retryable only when its signal was actually aborted; a timeout-named
+error alone does not qualify. ActiveNet and the default profile also recognize
+timeout-like errors and causes without an aborted signal.
 
 ## Shapes and reason codes
 
@@ -251,8 +258,9 @@ shapes. New platform codes are documented by that platform and retain meaning.
 `@courttide/connectors/testing` exports `runConformance`, a scripted fake
 fetch, recording gate, frozen clock and the case matrix. The runner takes a
 platform and fixture directory and uses the shared runtime with the scripted
-fetch and a frozen wall and monotonic clock. An optional harness factory can instead receive the fake fetch, recording
-gate, tenant and clock and return an `HttpClient` and operation wrapper. The
+fetch and a controlled wall and monotonic clock. An optional harness factory can
+instead receive the fake fetch, recording gate, tenant and clock and return an
+`HttpClient` and operation wrapper. The
 wrapper lets a runtime release a per-read ticket after parsing. The default
 does not use a live network; an injected harness must use the supplied fake fetch.
 
@@ -261,7 +269,9 @@ configuration path, court and date range. It has `responses.json`,
 `requests.json`, `gate.json`, and exactly one of `expected.json` or
 `error.json`. Optional metadata declares allowed courts, marked synthetic
 secrets, a gate deferral, an identity operation or an expected reflected-secret
-failure. Public metadata has `"source": "synthetic"`; use the example config
+failure. An optional `clockSequence` contains 1 to 16 instants, returned in
+order for successive clock calls; later calls repeat the last instant. Without a
+sequence, the clock stays at `clockNow`. Public metadata has `"source": "synthetic"`; use the example config
 under `examples/tenants/` and keys from 900001 through 900099.
 
 The runner compares request URLs, headers, bodies and fetch options in order;

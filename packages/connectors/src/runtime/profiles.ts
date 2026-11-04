@@ -176,6 +176,7 @@ export const civicRecLegacyProfile: TransportProfile = {
   contentLengthChecks: true,
   jsonContentTypes: ["application/json", "text/json"],
   htmlContentTypes: ["text/html"],
+  classifyJsonForHtml: true,
   challenge: {
     passiveAssets: ["/cdn-cgi/challenge-platform/scripts/jsd/main.js"],
     scope: "all",

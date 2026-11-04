@@ -153,6 +153,7 @@ export interface GateOutcome {
   status?: number;
   error?: ConnectorErrorCode;
   retryAfterMs?: number | null;
+  retryable?: boolean;
 }
 export interface Gate {
   acquire(request: GateRequest): Promise<GateTicket>;
@@ -204,6 +205,7 @@ export interface TransportProfile {
   contentLengthChecks: boolean;
   jsonContentTypes: readonly string[];
   htmlContentTypes: readonly string[];
+  classifyJsonForHtml?: boolean;
   challenge: {
     passiveAssets: readonly string[];
     scope: "html-or-leading" | "all";

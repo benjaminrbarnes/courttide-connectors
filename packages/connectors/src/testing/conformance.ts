@@ -22,6 +22,7 @@ const FixtureMetaSchema = z.object({
   source: z.string().min(1),
   cases: z.array(z.string().min(1)).min(1),
   clockNow: InstantSchema,
+  clockSequence: z.array(InstantSchema).min(1).max(16).optional(),
   configPath: z.string().min(1),
   court: z.string(),
   courts: z.array(z.string()).optional(),
@@ -114,7 +115,15 @@ export async function runConformance(
     const recording = createRecordingGate(
       meta.gateDeferral as GateDeferral | undefined,
     );
-    const now = frozenClock(meta.clockNow);
+    const sequence = meta.clockSequence;
+    let clockIndex = 0;
+    const now = sequence
+      ? () => {
+          const instant = sequence[Math.min(clockIndex, sequence.length - 1)]!;
+          clockIndex += 1;
+          return new Date(instant);
+        }
+      : frozenClock(meta.clockNow);
     const capabilities = CapabilitiesSchema.parse(
       platform.capabilities(tenant),
     );

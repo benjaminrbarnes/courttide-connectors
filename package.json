@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit -p packages/connectors/tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "build": "npm run build --workspace @courttide/connectors",
+    "cli": "npm run build --workspace @courttide/connectors && node packages/connectors/dist/cli/main.js",
     "schema:generate": "node scripts/generate-tenant-schema.mjs",
     "docs:platforms": "node scripts/platform-list.mjs",
     "docs:platforms:check": "node scripts/platform-list.mjs --check",

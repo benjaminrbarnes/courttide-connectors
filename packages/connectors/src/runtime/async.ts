@@ -28,11 +28,8 @@ export function isTimeoutError(
   signal: AbortSignal,
   abortMode: "timeout-only" | "any-abort",
 ): boolean {
-  if (
-    signal.aborted &&
-    (abortMode === "any-abort" || signal.reason?.name === "TimeoutError")
-  )
-    return true;
+  if (abortMode === "any-abort") return signal.aborted;
+  if (signal.aborted && signal.reason?.name === "TimeoutError") return true;
   const seen = new Set<unknown>();
   let candidate: unknown = error;
   for (

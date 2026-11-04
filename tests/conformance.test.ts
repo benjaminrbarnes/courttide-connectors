@@ -205,6 +205,45 @@ function writeFixture(root: string) {
 }
 
 describe("conformance kit", () => {
+  it("replays bounded clock sequences and repeats their final instant", async () => {
+    const root = mkdtempSync(join(tmpdir(), "connector-fixture-"));
+    roots.push(root);
+    const directory = writeFixture(root);
+    const metaPath = join(directory, "meta.json");
+    const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+    const sequence = [
+      "2026-11-04T09:00:00.000Z",
+      "2026-11-04T09:01:00.000Z",
+      "2026-11-04T09:02:00.000Z",
+    ];
+    meta.clockSequence = sequence;
+    writeFileSync(metaPath, JSON.stringify(meta));
+    const times: string[] = [];
+    await runConformance(toy, root, {
+      createHarness: (args) => {
+        for (let i = 0; i < 5; i += 1) {
+          const value = args.now();
+          times.push(value.toISOString());
+          value.setTime(0);
+        }
+        return harness(args);
+      },
+      inapplicableCases: notApplicable,
+    });
+    expect(times).toEqual([...sequence, sequence[2], sequence[2]]);
+
+    for (const invalid of [[], Array(17).fill(sequence[0]), ["invalid"]]) {
+      meta.clockSequence = invalid;
+      writeFileSync(metaPath, JSON.stringify(meta));
+      await expect(
+        runConformance(toy, root, {
+          createHarness: harness,
+          inapplicableCases: notApplicable,
+        }),
+      ).rejects.toThrow();
+    }
+  });
+
   it("replays a toy platform with an injected harness and catches mismatches", async () => {
     const root = mkdtempSync(join(tmpdir(), "connector-fixture-"));
     roots.push(root);

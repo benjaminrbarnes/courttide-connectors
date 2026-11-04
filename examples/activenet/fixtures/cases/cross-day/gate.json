@@ -15,7 +15,8 @@
       "ok": false,
       "status": 200,
       "error": "invalid_interval",
-      "retryAfterMs": null
+      "retryAfterMs": null,
+      "retryable": false
     }
   }
 ]

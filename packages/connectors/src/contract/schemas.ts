@@ -295,12 +295,18 @@ export const GateOutcomeSchema = z
       ])
       .optional(),
     retryAfterMs: z.number().nonnegative().nullable().optional(),
+    retryable: z.boolean().optional(),
   })
   .superRefine((outcome, ctx) => {
     if (!outcome.ok && !outcome.error)
       ctx.addIssue({
         code: "custom",
         message: "Failed outcomes require an error code",
+      });
+    if (outcome.ok && outcome.retryable !== undefined)
+      ctx.addIssue({
+        code: "custom",
+        message: "Retryability applies only to failed outcomes",
       });
   });
 export const TransportProfileSchema = z.strictObject({
@@ -314,6 +320,7 @@ export const TransportProfileSchema = z.strictObject({
   contentLengthChecks: z.boolean(),
   jsonContentTypes: z.array(z.string()),
   htmlContentTypes: z.array(z.string()),
+  classifyJsonForHtml: z.boolean().optional(),
   challenge: z
     .object({
       passiveAssets: z.array(z.string()),
