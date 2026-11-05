@@ -2,12 +2,11 @@
 
 ## 1.1.0
 
-**UNRELEASED**
-
 - Add optional HTTP admission to the runtime and CLI, with guarded fetch entry
   and fail-closed reservation and outcome reporting.
 - Add optional process-local reuse of successful anonymous CivicRec bootstrap
-  sessions, with scoped proofs, local expiry and separate job authority.
+  sessions, with scoped proofs, local expiry, known-expiry invalidation and
+  separate job authority.
 
 ## 1.0.0
 

@@ -9,7 +9,10 @@ import {
   assertNoSecretEcho,
   parseAnonymousBootstrap,
 } from "../../runtime/bootstrap.js";
-import { sharedBootstrap } from "../../runtime/session-store.js";
+import {
+  invalidateSharedSession,
+  sharedBootstrap,
+} from "../../runtime/session-store.js";
 import { parseCivicrecHours } from "./hours.js";
 import type { CivicRecConfig, SelectedCourt } from "./config.js";
 
@@ -45,6 +48,12 @@ function checked(response: HttpResponse) {
 }
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function sessionRejected(error: unknown): boolean {
+  return (
+    error instanceof ConnectorError &&
+    (error.code === "access_blocked" || error.code === "auth_required")
+  );
 }
 
 export class CivicRecReader {
@@ -106,8 +115,9 @@ export class CivicRecReader {
       url.href.length > 4096
     )
       return invalid();
-    const response = checked(
-      await this.http.request({
+    let calendarResponse: HttpResponse;
+    try {
+      calendarResponse = await this.http.request({
         court: court.key,
         purpose: "calendar",
         method: "GET",
@@ -118,8 +128,12 @@ export class CivicRecReader {
           cookie: bootstrap.cookie,
         },
         expect: "json",
-      }),
-    );
+      });
+    } catch (error) {
+      if (sessionRejected(error)) this.invalidateBootstrap();
+      throw error;
+    }
+    const response = checked(calendarResponse);
     if (
       Temporal.Instant.compare(response.requestedAt, bootstrap.receivedAt) < 0
     )
@@ -136,8 +150,10 @@ export class CivicRecReader {
       /expired|denied|unauthorized|forbidden|login required/i.test(
         payload.error,
       )
-    )
+    ) {
+      this.invalidateBootstrap();
       throw new ConnectorError("access_blocked");
+    }
     if (
       !object(payload) ||
       !Object.hasOwn(payload, "hours") ||
@@ -163,5 +179,9 @@ export class CivicRecReader {
       bootstrap.cookieValues,
     );
     return { evidence, receivedAt: response.receivedAt };
+  }
+
+  private invalidateBootstrap() {
+    invalidateSharedSession(this.sessionContext.http);
   }
 }

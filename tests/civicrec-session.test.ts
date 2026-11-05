@@ -194,7 +194,7 @@ describe("scoped anonymous bootstrap sessions", () => {
     });
   });
 
-  it("does not retain failures or perform a block-driven bootstrap retry", async () => {
+  it("invalidates a blocked calendar session without retrying that read", async () => {
     freezeClock();
     const upstream = transport({
       bootstrap: (count) =>
@@ -222,8 +222,54 @@ describe("scoped anonymous bootstrap sessions", () => {
     });
     expect(upstream.requests).toHaveLength(3);
     await make().read();
-    expect(upstream.requests.filter((item) => item.bootstrap)).toHaveLength(2);
-    expect(upstream.requests).toHaveLength(5);
+    expect(upstream.requests.filter((item) => item.bootstrap)).toHaveLength(3);
+    expect(upstream.requests).toHaveLength(6);
+  });
+
+  it("invalidates a session rejected by the payload classifier for the next job", async () => {
+    freezeClock();
+    let rejectCurrentSession = false;
+    const upstream = transport({
+      calendar: (count) =>
+        rejectCurrentSession && count === 3
+          ? new Response(JSON.stringify({ error: "session expired" }), {
+              headers: { "content-type": "application/json" },
+            })
+          : new Response(
+              JSON.stringify({
+                hours: [],
+                displayHours: [],
+                availableForRate: true,
+              }),
+              { headers: { "content-type": "application/json" } },
+            ),
+    });
+    const store = createSessionStore({ maxAgeMs: 60_000 });
+    const make = () => job({ store, fetcher: upstream.fetcher });
+    await make().read();
+    expect(upstream.requests.filter((item) => item.bootstrap)).toHaveLength(1);
+
+    rejectCurrentSession = true;
+    const rejected = make();
+    await expect(rejected.read()).rejects.toMatchObject({
+      code: "access_blocked",
+    });
+    expect(upstream.requests).toHaveLength(4);
+    expect(rejected.recording.calls.at(-1)).toMatchObject({
+      outcome: { ok: false, error: "access_blocked", status: 200 },
+    });
+
+    rejectCurrentSession = false;
+    await make().read();
+    expect(upstream.requests.map((item) => item.bootstrap)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+    ]);
   });
 
   it.each([

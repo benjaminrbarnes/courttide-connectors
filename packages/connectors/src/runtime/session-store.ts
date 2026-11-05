@@ -259,6 +259,14 @@ export function assertSessionScope(http: HttpClient): void {
   if (binding) assertScope(binding);
 }
 
+/** Invalidate only the session bound to this runtime's transport scope. */
+export function invalidateSharedSession(http: HttpClient): void {
+  const binding = bindings.get(http);
+  if (!binding) return;
+  binding.activeToken = undefined;
+  binding.store.entries.delete(binding.key);
+}
+
 export function assertSessionCookie(http: HttpClient): void {
   const binding = bindings.get(http);
   if (!binding) return;
