@@ -298,6 +298,8 @@ export function createConnectorRuntime(
           ? request.url.href
           : request.url;
       let fetching: Promise<Response>;
+      let sessionPreflightFailure: unknown;
+      let sessionPreflightFailed = false;
       try {
         const init: RequestInit = {
           method: request.method,
@@ -332,7 +334,16 @@ export function createConnectorRuntime(
             }
             called = true;
             deadline();
-            assertCookie(request);
+            try {
+              assertSessionScope(http);
+              assertCookie(request);
+            } catch (error) {
+              if (options.sessionStore !== undefined) {
+                sessionPreflightFailure = error;
+                sessionPreflightFailed = true;
+              }
+              throw error;
+            }
             const marked: unknown = markStarted();
             if (marked !== undefined) {
               if (marked instanceof Promise) void marked.catch(() => {});
@@ -358,6 +369,8 @@ export function createConnectorRuntime(
           fetching = actual;
         }
       } catch (error) {
+        if (sessionPreflightFailed && error === sessionPreflightFailure)
+          throw error;
         throw transportFailure(error, signal, options.profile);
       }
       void fetching

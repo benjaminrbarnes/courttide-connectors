@@ -189,6 +189,12 @@ one-argument acquire and fetch behavior. A controller must verify this runtime
 capability before enabling the HTTP gate; installing a gate beside an older
 runtime does not enable guarded dispatch.
 
+When a scoped session is combined with guarded dispatch, the selected session
+scope and cookie proof are checked again at the actual fetch entry. Expiry or
+invalidation before that entry prevents the fetch and reports `not_sent` for
+the already acquired reservation. Each job retains its own gate, signal and
+deadline even when it reuses a successful bootstrap proof.
+
 With guarded dispatch, the runtime also inspects up to 64 KiB and 4,096
 chunks of a 5xx response for known challenge markers. A recognized challenge
 is reported as `access_blocked` with the observed status; an inconclusive or
