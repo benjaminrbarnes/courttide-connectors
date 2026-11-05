@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0
+
+- Mark the existing read-only ActiveNet and CivicRec connectors as stable.
+- Retain the contract, runtime, CLI and local pacing from 0.1.2.
+
 ## 0.1.2
 
 - Use a 2.5-second default and 2-second minimum for local development pacing.
