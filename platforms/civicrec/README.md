@@ -6,22 +6,42 @@ connector makes a catalog bootstrap request, then one hours request per date;
 it accepts inclusive ranges of one or two dates. No metadata or booking action
 is part of this connector.
 
-The bootstrap's session key and cookie are secrets. They stay in memory, bind to
-the runtime instance and never appear in a reading. Bootstrap is cached per
-connector, including a failure; a block or expired session does not trigger a
-retry or rebootstrap. Reuse that connector/runtime pair only within the same
-request-authority lifetime: retaining it across unrelated jobs would also
-retain its original gate and cancellation signal. The current release has no
-cross-runtime session-store API; copying cookies into another runtime is not
-supported.
+The bootstrap's session key and cookie are secrets. They stay in memory and
+never appear in a reading. By default, bootstrap is cached per connector,
+including a failure. Keep that connector and runtime within one job's authority
+lifetime; retaining them would also retain the job's gate and signal.
 
-With a valid bootstrap in the same connector, each date adds one hours request;
-a new connector also needs its bootstrap request. These are implementation call
-shapes, not measured provider-session lifetimes. No server session TTL or logout
-protocol is established by the connector. A future shared session must retain
-the original setup provenance and package cookie proofs while each job keeps
-its own runtime and admission. Follow the [session lifecycle
-contract](../../docs/CONTRACT.md#provider-setup-and-session-reuse).
+To reuse a successful anonymous bootstrap across jobs in one process, create
+`createSessionStore({ maxAgeMs })` and pass the store as `sessionStore` to each
+job's `createConnectorRuntime`. Each job still creates its own runtime, gate and
+signal. If the connector context supplies a signal, pass that same signal to
+its runtime. Use `sessionAccount: "anonymous"` or omit it; member sessions are
+not supported. The store keys the complete tenant configuration and transport
+profile, not the job's selected-court list. It also keys the injected fetch
+function's identity. For per-job wrappers around the same underlying transport,
+pass the same `sessionTransportIdentity` object only when their transport
+configuration is equivalent. Different transports must use different objects.
+
+The required `maxAgeMs` is a local policy from 1 millisecond through one hour,
+not a claim about the server's session lifetime. A cookie's earlier explicit
+expiry also limits reuse. The store compares the original receipt time against
+the process wall clock, so job clocks must agree with that clock. `maxEntries`
+defaults to 16 and can be 1 through 64.
+The store is process-local, retains only successful setup and coalesces a
+concurrent setup for the same scope. Cancelling a waiting job does not cancel
+the owner; cancelling the owner can fail its waiters. A later caller may try
+again through its own admission. Use `runtime.invalidateSession()` for its
+scope or `store.clear()` for all scopes. Both invalidate in-flight adoption;
+they do not start another request.
+
+Known expiry between dates can cause one newly admitted bootstrap before the
+next date. A proof that expires while waiting for admission is rejected before
+the request is sent. Blocks, rate limits and ordinary failures do not trigger
+an authentication retry. With a valid session, each date uses one hours
+request; a cold session also needs one bootstrap. These are implementation
+call shapes, not measured provider-session lifetimes. Original setup provenance
+and package-owned cookie proofs are retained without replaying an old HTTP
+response. Follow the [session lifecycle contract](../../docs/CONTRACT.md#provider-setup-and-session-reuse).
 
 A successful day reports `status: 200`, partial coverage and
 `continuous_ranges` evidence. Only reported non-block ranges are candidates for

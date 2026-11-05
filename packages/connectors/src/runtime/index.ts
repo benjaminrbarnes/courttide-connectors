@@ -1,6 +1,6 @@
 export * from "./bootstrap.js";
 export * from "./challenge.js";
-export * from "./cookies.js";
+export { parseCookieJar } from "./cookies.js";
 export * from "./http.js";
 export * from "./polite-gate.js";
 export * from "./profiles.js";
@@ -9,4 +9,6 @@ export { AdmissionError } from "./admission-protocol.js";
 export type { AdmissionErrorCode } from "./admission-protocol.js";
 export { createHttpAdmissionGate } from "./http-admission.js";
 export type { HttpAdmissionOptions } from "./http-admission.js";
+export { createSessionStore } from "./session-store.js";
+export type { SessionStore, SessionStoreOptions } from "./session-store.js";
 export * from "./temporal.js";

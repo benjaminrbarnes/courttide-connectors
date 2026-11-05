@@ -133,8 +133,8 @@ method so a per-read lease includes parsing.
 
 For a profile with cookies, the runtime keeps bootstrap `Set-Cookie` rows only
 in memory and sends a cookie header only when it matches a scoped jar issued to
-that runtime. An unknown cookie is rejected before gate admission. Keep a
-stateful connector and its runtime together; callers still own session reuse.
+that runtime or imported from a scoped package-owned session. An unknown cookie
+is rejected before gate admission. See the platform README for supported reuse.
 
 Discovery and live checks use one gate per upstream site across courts, workers
 and iterations. `politeGate` serializes a site's requests in memory and waits
@@ -337,8 +337,7 @@ Session state and request authority have separate lifetimes. A job's runtime,
 gate, lease, cancellation signal and deadline belong to that job. Sharing a
 session must not reuse another job's authority. Cookie proofs remain owned by
 the package: callers cannot manufacture valid setup by copying cookie strings
-into a new runtime. See the platform README for the implemented reuse boundary;
-this policy does not add a session-store API to the current release.
+into a new runtime. See the platform README for the implemented reuse boundary.
 
 Document measured cold and warm request counts, the reuse scope and local
 lifetime, known provider expiry signals, invalidation and any bounded renewal.

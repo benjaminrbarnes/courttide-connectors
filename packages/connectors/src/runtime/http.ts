@@ -19,6 +19,13 @@ import { bounded, isTimeoutError, transportFailure } from "./async.js";
 import { parseCookieJar } from "./cookies.js";
 import { snapshotRequest } from "./request.js";
 import { processResponse } from "./response.js";
+import {
+  assertSessionCookie,
+  assertSessionScope,
+  bindSession,
+  type CookieProof,
+  type SessionStore,
+} from "./session-store.js";
 
 const TIMEOUT_MS = 15_000;
 const errorCodes = new Set<ConnectorErrorCode>([
@@ -42,10 +49,17 @@ export interface RuntimeOptions {
   now: () => Date;
   signal?: AbortSignal;
   monotonicNow?: () => number;
+  /** Optional process-local cache for successful anonymous bootstrap sessions. */
+  sessionStore?: SessionStore;
+  /** Only anonymous sessions are supported. */
+  sessionAccount?: "anonymous";
+  /** Stable identity of the underlying transport when fetch is wrapped per job. */
+  sessionTransportIdentity?: object;
 }
 export interface ConnectorRuntime {
   http: HttpClient;
   execute<T>(operation: () => Promise<T>): Promise<T>;
+  invalidateSession(): void;
 }
 interface ReadScope {
   tickets: GateTicket[];
@@ -54,13 +68,6 @@ interface ReadScope {
   status?: number;
   stop?: { failure: ConnectorError; status?: number };
 }
-interface CookieProof {
-  headers: Headers;
-  url: URL;
-  endpointPath: string;
-  receivedAt: string;
-}
-
 function safeError(error: unknown, retryable: boolean): ConnectorError {
   if (
     error &&
@@ -142,6 +149,9 @@ export function createConnectorRuntime(
     typeof options.now !== "function" ||
     (options.monotonicNow !== undefined &&
       typeof options.monotonicNow !== "function") ||
+    (options.sessionStore === undefined &&
+      (options.sessionAccount !== undefined ||
+        options.sessionTransportIdentity !== undefined)) ||
     (options.signal !== undefined && !(options.signal instanceof AbortSignal))
   )
     throw new ConnectorError("schema_changed");
@@ -153,6 +163,7 @@ export function createConnectorRuntime(
       ([name]) => name.toLowerCase() === "cookie",
     )?.[1];
     if (cookie === undefined) return;
+    assertSessionCookie(http);
     const jar = options.profile.cookieJar;
     const issued =
       jar &&
@@ -189,6 +200,7 @@ export function createConnectorRuntime(
   }
   const http: HttpClient = {
     async request(input: HttpRequest) {
+      assertSessionScope(http);
       const request = snapshotRequest(input, options.tenant, options.profile);
       assertCookie(request);
       const scope =
@@ -275,6 +287,12 @@ export function createConnectorRuntime(
           wallStart + Math.max(0, monotonicNow() - monoStart),
         ).toISOString();
       deadline();
+      if (
+        Object.keys(request.headers ?? {}).some(
+          (key) => key.toLowerCase() === "cookie",
+        )
+      )
+        assertSessionCookie(http);
       const url =
         options.profile.fetchInput === "string"
           ? request.url.href
@@ -390,6 +408,8 @@ export function createConnectorRuntime(
           endpointPath: options.profile.cookieJar.pathFor(request),
           receivedAt: result.receivedAt,
         });
+        if (options.sessionStore !== undefined && cookieProofs.length > 64)
+          cookieProofs.shift();
       }
       return result;
     } catch (error) {
@@ -418,8 +438,62 @@ export function createConnectorRuntime(
         );
     }
   }
+  function copyProof(proof: CookieProof): CookieProof {
+    const headers = new Headers();
+    for (const row of proof.headers.getSetCookie())
+      headers.append("set-cookie", row);
+    return { ...proof, headers, url: new URL(proof.url.href) };
+  }
+  const invalidateSession =
+    options.sessionStore !== undefined
+      ? bindSession(http, {
+          store: options.sessionStore,
+          account: options.sessionAccount,
+          tenant: options.tenant,
+          profile: options.profile,
+          leaseScope: options.leaseScope,
+          transportIdentity: options.sessionTransportIdentity ?? options.fetch,
+          signal: options.signal,
+          findProof(bootstrap) {
+            const jar = options.profile.cookieJar;
+            const proof = cookieProofs.findLast((candidate) => {
+              if (
+                !jar ||
+                candidate.url.origin !== options.tenant.origin ||
+                candidate.url.pathname !== `${bootstrap.base}catalog` ||
+                Date.parse(candidate.receivedAt) !==
+                  Date.parse(bootstrap.receivedAt)
+              )
+                return false;
+              try {
+                return (
+                  parseCookieJar(
+                    candidate.headers,
+                    candidate.url,
+                    candidate.endpointPath,
+                    candidate.receivedAt,
+                    { cookieDomains: jar.cookieDomains },
+                  ).header === bootstrap.cookie
+                );
+              } catch {
+                return false;
+              }
+            });
+            if (!proof) throw new ConnectorError("schema_changed");
+            return copyProof(proof);
+          },
+          importProof(proof) {
+            cookieProofs.length = 0;
+            cookieProofs.push(copyProof(proof));
+          },
+        })
+      : () => {};
   return {
     http,
+    invalidateSession() {
+      invalidateSession();
+      if (options.sessionStore !== undefined) cookieProofs.length = 0;
+    },
     async execute<T>(operation: () => Promise<T>): Promise<T> {
       if (options.leaseScope === "per_request") return operation();
       const scope: ReadScope = {

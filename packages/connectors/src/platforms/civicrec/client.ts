@@ -1,10 +1,15 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { ConnectorError } from "../../contract/errors.js";
-import type { HttpClient, HttpResponse } from "../../contract/types.js";
+import type {
+  HttpClient,
+  HttpResponse,
+  TenantConfig,
+} from "../../contract/types.js";
 import {
   assertNoSecretEcho,
   parseAnonymousBootstrap,
 } from "../../runtime/bootstrap.js";
+import { sharedBootstrap } from "../../runtime/session-store.js";
 import { parseCivicrecHours } from "./hours.js";
 import type { CivicRecConfig, SelectedCourt } from "./config.js";
 
@@ -47,6 +52,11 @@ export class CivicRecReader {
   constructor(
     private readonly config: CivicRecConfig,
     private readonly http: HttpClient,
+    private readonly sessionContext: {
+      http: HttpClient;
+      tenant: TenantConfig;
+      signal?: AbortSignal;
+    },
   ) {}
 
   private async loadBootstrap(court: string) {
@@ -78,7 +88,14 @@ export class CivicRecReader {
   async readHours(court: SelectedCourt, date: string) {
     const facilityId = String(court.params.facilityId);
     const rateTypeId = String(court.params.rateTypeId);
-    const bootstrap = await (this.bootstrap ??= this.loadBootstrap(court.key));
+    const shared = sharedBootstrap(
+      this.sessionContext.http,
+      () => this.loadBootstrap(court.key),
+      this.sessionContext.tenant,
+      this.sessionContext.signal,
+    );
+    const bootstrap = await (shared ??
+      (this.bootstrap ??= this.loadBootstrap(court.key)));
     const path = `${bootstrap.base}catalog/getFacilityHours/${encodeURIComponent(bootstrap.key)}/${facilityId}/${rateTypeId}/${date}`;
     const url = new URL(path, this.config.catalogUrl);
     if (

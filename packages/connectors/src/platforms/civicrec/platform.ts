@@ -91,7 +91,15 @@ export function createCivicRecConnector(context: ConnectorContext): Connector {
   const config = configure(context);
   const request = context.http.request.bind(context.http);
   const now = context.now;
-  const reader = new CivicRecReader(config, { request });
+  const reader = new CivicRecReader(
+    config,
+    { request },
+    {
+      http: context.http,
+      tenant: context.tenant,
+      signal: context.signal,
+    },
+  );
   return {
     capabilities,
     async readCourt(key, range): Promise<CourtReading> {
