@@ -42,11 +42,10 @@ npm run cli -- read activenet --config examples/tenants/activenet.json \
   --court 900001 --date 2026-10-31 --live --base-url http://127.0.0.1:34567
 ```
 
-Once version 0.1.0 is released, the same checkout and server also work with
-the release tarball:
+The same checkout and server also work with the released 0.1.2 tarball:
 
 ```sh
-npx --yes --package https://github.com/benjaminrbarnes/courttide-connectors/releases/download/connectors-v0.1.0/courttide-connectors-0.1.0.tgz \
+npx --yes --package https://github.com/benjaminrbarnes/courttide-connectors/releases/download/connectors-v0.1.2/courttide-connectors-0.1.2.tgz \
   courttide-connectors read activenet --config examples/tenants/activenet.json \
   --court 900001 --date 2026-10-31 --live --base-url http://127.0.0.1:34567
 ```
