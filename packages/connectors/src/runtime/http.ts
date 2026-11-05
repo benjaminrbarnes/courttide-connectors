@@ -52,6 +52,7 @@ interface ReadScope {
   requestStarted: boolean;
   pending: Set<Promise<void>>;
   status?: number;
+  stop?: { failure: ConnectorError; status?: number };
 }
 interface CookieProof {
   headers: Headers;
@@ -371,6 +372,7 @@ export function createConnectorRuntime(
           abortError,
           beforeDispose,
           normalizeFailure,
+          inspectRejectedChallenge: dispatch !== undefined,
         },
         new Date(wallStart).toISOString(),
       );
@@ -392,6 +394,15 @@ export function createConnectorRuntime(
       return result;
     } catch (error) {
       failure = normalizeFailure(error);
+      if (
+        scope &&
+        dispatch &&
+        (status === 403 ||
+          status === 429 ||
+          failure.code === "access_blocked" ||
+          failure.code === "rate_limited")
+      )
+        scope.stop = { failure, status };
       throw failure;
     } finally {
       beforeDispose();
@@ -433,7 +444,9 @@ export function createConnectorRuntime(
           try {
             await options.gate.release(
               ticket,
-              gateOutcome(success, failure, scope.status),
+              scope.stop
+                ? gateOutcome(false, scope.stop.failure, scope.stop.status)
+                : gateOutcome(success, failure, scope.status),
             );
           } catch (error) {
             if (!releaseFailed) releaseFailure = error;

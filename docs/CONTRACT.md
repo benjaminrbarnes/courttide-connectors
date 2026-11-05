@@ -189,6 +189,14 @@ one-argument acquire and fetch behavior. A controller must verify this runtime
 capability before enabling the HTTP gate; installing a gate beside an older
 runtime does not enable guarded dispatch.
 
+With guarded dispatch, the runtime also inspects up to 64 KiB and 4,096
+chunks of a 5xx response for known challenge markers. A recognized challenge
+is reported as `access_blocked` with the observed status; an inconclusive or
+failed probe keeps the original HTTP error. The probe uses the request deadline
+and cancels the body. For a per-read lease, an observed 403, 429 or challenge
+remains the release outcome even if the read callback catches or replaces the
+request error. Ordinary gates retain their profile's existing response order.
+
 `leaseScope: "per_read"` releases after the whole read or identity check,
 including parsing, and reports its final outcome. `"per_request"` releases
 after each response is classified, including a platform's payload-level

@@ -7,6 +7,7 @@ import type {
 import { bounded, transportFailure } from "./async.js";
 import { detectChallenge } from "./challenge.js";
 import { parseRetryAfter } from "./retry-after.js";
+import { rejectedChallenge } from "./rejected-challenge.js";
 
 const MAX_BYTES = 1024 * 1024;
 
@@ -18,6 +19,7 @@ export interface ResponseClock {
   abortError?: () => unknown;
   beforeDispose?: () => void;
   normalizeFailure?: (error: unknown) => unknown;
+  inspectRejectedChallenge?: boolean;
 }
 
 function checkStatus(
@@ -108,7 +110,21 @@ export async function processResponse(
     const bodyFirst =
       profile.classificationOrder === "legacy-body-first" &&
       response.status === 200;
-    if (!bodyFirst) checkStatus(response, profile, clock);
+    if (!bodyFirst) {
+      try {
+        checkStatus(response, profile, clock);
+      } catch (error) {
+        if (
+          clock.inspectRejectedChallenge &&
+          response.status >= 500 &&
+          error instanceof ConnectorError &&
+          error.code === "http_error" &&
+          (await rejectedChallenge(response, profile, clock))
+        )
+          throw new ConnectorError("access_blocked");
+        throw error;
+      }
+    }
     const length = checkLength(response, profile);
     if (!bodyFirst) checkType(response, expected, profile);
     if (!response.body && !bodyFirst)
