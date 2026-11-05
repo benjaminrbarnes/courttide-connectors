@@ -8,6 +8,7 @@ import type {
   ConnectorErrorCode,
   Gate,
   GateOutcome,
+  GateRequest,
   GateTicket,
   HttpClient,
   HttpRequest,
@@ -18,6 +19,13 @@ import { bounded, isTimeoutError, transportFailure } from "./async.js";
 import { parseCookieJar } from "./cookies.js";
 import { snapshotRequest } from "./request.js";
 import { processResponse } from "./response.js";
+import {
+  assertSessionCookie,
+  assertSessionScope,
+  bindSession,
+  type CookieProof,
+  type SessionStore,
+} from "./session-store.js";
 
 const TIMEOUT_MS = 15_000;
 const errorCodes = new Set<ConnectorErrorCode>([
@@ -41,24 +49,25 @@ export interface RuntimeOptions {
   now: () => Date;
   signal?: AbortSignal;
   monotonicNow?: () => number;
+  /** Optional process-local cache for successful anonymous bootstrap sessions. */
+  sessionStore?: SessionStore;
+  /** Only anonymous sessions are supported. */
+  sessionAccount?: "anonymous";
+  /** Stable identity of the underlying transport when fetch is wrapped per job. */
+  sessionTransportIdentity?: object;
 }
 export interface ConnectorRuntime {
   http: HttpClient;
   execute<T>(operation: () => Promise<T>): Promise<T>;
+  invalidateSession(): void;
 }
 interface ReadScope {
   tickets: GateTicket[];
   requestStarted: boolean;
   pending: Set<Promise<void>>;
   status?: number;
+  stop?: { failure: ConnectorError; status?: number };
 }
-interface CookieProof {
-  headers: Headers;
-  url: URL;
-  endpointPath: string;
-  receivedAt: string;
-}
-
 function safeError(error: unknown, retryable: boolean): ConnectorError {
   if (
     error &&
@@ -134,16 +143,54 @@ export function createConnectorRuntime(
     !["per_read", "per_request"].includes(options.leaseScope) ||
     typeof options.gate?.acquire !== "function" ||
     typeof options.gate?.release !== "function" ||
+    (options.gate?.dispatch !== undefined &&
+      typeof options.gate.dispatch !== "function") ||
     typeof options.fetch !== "function" ||
     typeof options.now !== "function" ||
     (options.monotonicNow !== undefined &&
       typeof options.monotonicNow !== "function") ||
+    (options.sessionStore === undefined &&
+      (options.sessionAccount !== undefined ||
+        options.sessionTransportIdentity !== undefined)) ||
     (options.signal !== undefined && !(options.signal instanceof AbortSignal))
   )
     throw new ConnectorError("schema_changed");
   const scopes = new AsyncLocalStorage<ReadScope>();
   const monotonicNow = options.monotonicNow ?? (() => performance.now());
   const cookieProofs: CookieProof[] = [];
+  function assertCookie(request: HttpRequest): void {
+    const cookie = Object.entries(request.headers ?? {}).find(
+      ([name]) => name.toLowerCase() === "cookie",
+    )?.[1];
+    if (cookie === undefined) return;
+    assertSessionCookie(http);
+    const jar = options.profile.cookieJar;
+    const issued =
+      jar &&
+      cookieProofs.some((proof) => {
+        try {
+          return (
+            parseCookieJar(
+              proof.headers,
+              proof.url,
+              proof.endpointPath,
+              proof.receivedAt,
+              { cookieDomains: jar.cookieDomains },
+            ).header === cookie &&
+            parseCookieJar(
+              proof.headers,
+              proof.url,
+              request.url.pathname,
+              proof.receivedAt,
+              { cookieDomains: jar.cookieDomains },
+            ).header === cookie
+          );
+        } catch {
+          return false;
+        }
+      });
+    if (!issued) throw new ConnectorError("schema_changed");
+  }
   async function releaseRequest(ticket: GateTicket, outcome: GateOutcome) {
     try {
       await options.gate.release(ticket, outcome);
@@ -153,38 +200,9 @@ export function createConnectorRuntime(
   }
   const http: HttpClient = {
     async request(input: HttpRequest) {
+      assertSessionScope(http);
       const request = snapshotRequest(input, options.tenant, options.profile);
-      const cookie = Object.entries(request.headers ?? {}).find(
-        ([name]) => name.toLowerCase() === "cookie",
-      )?.[1];
-      if (cookie !== undefined) {
-        const jar = options.profile.cookieJar;
-        const issued =
-          jar &&
-          cookieProofs.some((proof) => {
-            try {
-              return (
-                parseCookieJar(
-                  proof.headers,
-                  proof.url,
-                  proof.endpointPath,
-                  proof.receivedAt,
-                  { cookieDomains: jar.cookieDomains },
-                ).header === cookie &&
-                parseCookieJar(
-                  proof.headers,
-                  proof.url,
-                  request.url.pathname,
-                  proof.receivedAt,
-                  { cookieDomains: jar.cookieDomains },
-                ).header === cookie
-              );
-            } catch {
-              return false;
-            }
-          });
-        if (!issued) throw new ConnectorError("schema_changed");
-      }
+      assertCookie(request);
       const scope =
         options.leaseScope === "per_read" ? scopes.getStore() : undefined;
       if (options.leaseScope === "per_read" && !scope)
@@ -209,12 +227,16 @@ export function createConnectorRuntime(
   };
 
   async function performRequest(request: HttpRequest, scope?: ReadScope) {
-    const ticket = await options.gate.acquire({
+    const gateRequest: GateRequest = {
       court: request.court,
       purpose: request.purpose,
       method: request.method,
       url: request.url.href,
-    });
+    };
+    const dispatch = options.gate.dispatch;
+    const ticket = dispatch
+      ? await options.gate.acquire(gateRequest, dispatch)
+      : await options.gate.acquire(gateRequest);
     scope?.tickets.push(ticket);
     const controller = new AbortController();
     const nativeTimeout = options.profile.timeoutSignal === "native";
@@ -265,13 +287,21 @@ export function createConnectorRuntime(
           wallStart + Math.max(0, monotonicNow() - monoStart),
         ).toISOString();
       deadline();
+      if (
+        Object.keys(request.headers ?? {}).some(
+          (key) => key.toLowerCase() === "cookie",
+        )
+      )
+        assertSessionCookie(http);
       const url =
         options.profile.fetchInput === "string"
           ? request.url.href
           : request.url;
       let fetching: Promise<Response>;
+      let sessionPreflightFailure: unknown;
+      let sessionPreflightFailed = false;
       try {
-        fetching = options.fetch(url, {
+        const init: RequestInit = {
           method: request.method,
           headers: request.headers,
           ...(request.body === undefined ? {} : { body: request.body }),
@@ -279,8 +309,68 @@ export function createConnectorRuntime(
           redirect: "manual",
           cache: "no-store",
           signal,
-        });
+        };
+        if (!dispatch) fetching = options.fetch(url, init);
+        else {
+          let open = true;
+          let called = false;
+          let violated = false;
+          let actual: Promise<Response> | undefined;
+          const discard = (pending: Promise<Response>) => {
+            void pending
+              .then(
+                (late) => {
+                  if (late instanceof Response)
+                    void late.body?.cancel().catch(() => {});
+                },
+                () => {},
+              )
+              .catch(() => {});
+          };
+          const send = (markStarted: () => void): Promise<Response> => {
+            if (!open || called || typeof markStarted !== "function") {
+              violated = true;
+              throw new ConnectorError("schema_changed");
+            }
+            called = true;
+            deadline();
+            try {
+              assertSessionScope(http);
+              assertCookie(request);
+            } catch (error) {
+              if (options.sessionStore !== undefined) {
+                sessionPreflightFailure = error;
+                sessionPreflightFailed = true;
+              }
+              throw error;
+            }
+            const marked: unknown = markStarted();
+            if (marked !== undefined) {
+              if (marked instanceof Promise) void marked.catch(() => {});
+              throw new ConnectorError("schema_changed");
+            }
+            actual = options.fetch(url, init);
+            return actual;
+          };
+          let dispatched: Promise<Response>;
+          try {
+            dispatched = dispatch.call(options.gate, ticket, gateRequest, send);
+          } catch (error) {
+            if (actual) discard(actual);
+            throw error;
+          } finally {
+            open = false;
+          }
+          if (!called || violated || !actual || dispatched !== actual) {
+            if (actual) discard(actual);
+            if (dispatched instanceof Promise) void dispatched.catch(() => {});
+            throw new ConnectorError("schema_changed");
+          }
+          fetching = actual;
+        }
       } catch (error) {
+        if (sessionPreflightFailed && error === sessionPreflightFailure)
+          throw error;
         throw transportFailure(error, signal, options.profile);
       }
       void fetching
@@ -313,6 +403,7 @@ export function createConnectorRuntime(
           abortError,
           beforeDispose,
           normalizeFailure,
+          inspectRejectedChallenge: dispatch !== undefined,
         },
         new Date(wallStart).toISOString(),
       );
@@ -330,10 +421,23 @@ export function createConnectorRuntime(
           endpointPath: options.profile.cookieJar.pathFor(request),
           receivedAt: result.receivedAt,
         });
+        if (options.sessionStore !== undefined && cookieProofs.length > 64)
+          cookieProofs.shift();
       }
       return result;
     } catch (error) {
       failure = normalizeFailure(error);
+      if (
+        scope &&
+        dispatch &&
+        (status === 401 ||
+          status === 403 ||
+          status === 429 ||
+          failure.code === "access_blocked" ||
+          failure.code === "auth_required" ||
+          failure.code === "rate_limited")
+      )
+        scope.stop = { failure, status };
       throw failure;
     } finally {
       beforeDispose();
@@ -349,8 +453,62 @@ export function createConnectorRuntime(
         );
     }
   }
+  function copyProof(proof: CookieProof): CookieProof {
+    const headers = new Headers();
+    for (const row of proof.headers.getSetCookie())
+      headers.append("set-cookie", row);
+    return { ...proof, headers, url: new URL(proof.url.href) };
+  }
+  const invalidateSession =
+    options.sessionStore !== undefined
+      ? bindSession(http, {
+          store: options.sessionStore,
+          account: options.sessionAccount,
+          tenant: options.tenant,
+          profile: options.profile,
+          leaseScope: options.leaseScope,
+          transportIdentity: options.sessionTransportIdentity ?? options.fetch,
+          signal: options.signal,
+          findProof(bootstrap) {
+            const jar = options.profile.cookieJar;
+            const proof = cookieProofs.findLast((candidate) => {
+              if (
+                !jar ||
+                candidate.url.origin !== options.tenant.origin ||
+                candidate.url.pathname !== `${bootstrap.base}catalog` ||
+                Date.parse(candidate.receivedAt) !==
+                  Date.parse(bootstrap.receivedAt)
+              )
+                return false;
+              try {
+                return (
+                  parseCookieJar(
+                    candidate.headers,
+                    candidate.url,
+                    candidate.endpointPath,
+                    candidate.receivedAt,
+                    { cookieDomains: jar.cookieDomains },
+                  ).header === bootstrap.cookie
+                );
+              } catch {
+                return false;
+              }
+            });
+            if (!proof) throw new ConnectorError("schema_changed");
+            return copyProof(proof);
+          },
+          importProof(proof) {
+            cookieProofs.length = 0;
+            cookieProofs.push(copyProof(proof));
+          },
+        })
+      : () => {};
   return {
     http,
+    invalidateSession() {
+      invalidateSession();
+      if (options.sessionStore !== undefined) cookieProofs.length = 0;
+    },
     async execute<T>(operation: () => Promise<T>): Promise<T> {
       if (options.leaseScope === "per_request") return operation();
       const scope: ReadScope = {
@@ -375,7 +533,9 @@ export function createConnectorRuntime(
           try {
             await options.gate.release(
               ticket,
-              gateOutcome(success, failure, scope.status),
+              scope.stop
+                ? gateOutcome(false, scope.stop.failure, scope.stop.status)
+                : gateOutcome(success, failure, scope.status),
             );
           } catch (error) {
             if (!releaseFailed) releaseFailure = error;

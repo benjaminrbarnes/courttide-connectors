@@ -27,6 +27,8 @@ import {
   listPlatforms,
 } from "./registry.js";
 import { CliExit, type CliIO, type ReadOptions } from "./types.js";
+import { AdmissionError } from "../runtime/admission-protocol.js";
+import { prepareAdmission } from "./admission.js";
 
 const creditLine =
   "Read with courttide-connectors by CourtTide · https://courttide.com";
@@ -301,6 +303,13 @@ async function commandTestLive(
     );
   }
   const execution = createCliGate(DEFAULT_DEVELOPMENT_GAP_MS, siteMinimums);
+  const admission = prepareAdmission(execution, io);
+  if (admission && baseUrl) throw new AdmissionError("unavailable");
+  if (
+    admission &&
+    targets.some((target) => target.tenant.origin !== admission.sourceOrigin)
+  )
+    throw new AdmissionError("unavailable");
   const counts = {
     selected: targets.length,
     passed: 0,
@@ -385,6 +394,7 @@ async function commandTestLive(
         exitCode = 3;
       } else if (
         code === "rate_limited" ||
+        (admission !== null && code === "http_error") ||
         (httpStatus !== undefined && httpStatus >= 500) ||
         (code === "http_error" &&
           error &&
@@ -392,7 +402,8 @@ async function commandTestLive(
           "retryable" in error &&
           error.retryable === true) ||
         (httpStatus === undefined && code === "http_error") ||
-        (error instanceof Error && error.name === "GateDeferred")
+        (error instanceof Error && error.name === "GateDeferred") ||
+        error instanceof AdmissionError
       ) {
         counts.inconclusive += 1;
         exitCode = 2;

@@ -1,10 +1,18 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { ConnectorError } from "../../contract/errors.js";
-import type { HttpClient, HttpResponse } from "../../contract/types.js";
+import type {
+  HttpClient,
+  HttpResponse,
+  TenantConfig,
+} from "../../contract/types.js";
 import {
   assertNoSecretEcho,
   parseAnonymousBootstrap,
 } from "../../runtime/bootstrap.js";
+import {
+  invalidateSharedSession,
+  sharedBootstrap,
+} from "../../runtime/session-store.js";
 import { parseCivicrecHours } from "./hours.js";
 import type { CivicRecConfig, SelectedCourt } from "./config.js";
 
@@ -41,12 +49,23 @@ function checked(response: HttpResponse) {
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
+function sessionRejected(error: unknown): boolean {
+  return (
+    error instanceof ConnectorError &&
+    (error.code === "access_blocked" || error.code === "auth_required")
+  );
+}
 
 export class CivicRecReader {
   private bootstrap?: Promise<ReturnType<typeof parseAnonymousBootstrap>>;
   constructor(
     private readonly config: CivicRecConfig,
     private readonly http: HttpClient,
+    private readonly sessionContext: {
+      http: HttpClient;
+      tenant: TenantConfig;
+      signal?: AbortSignal;
+    },
   ) {}
 
   private async loadBootstrap(court: string) {
@@ -78,7 +97,14 @@ export class CivicRecReader {
   async readHours(court: SelectedCourt, date: string) {
     const facilityId = String(court.params.facilityId);
     const rateTypeId = String(court.params.rateTypeId);
-    const bootstrap = await (this.bootstrap ??= this.loadBootstrap(court.key));
+    const shared = sharedBootstrap(
+      this.sessionContext.http,
+      () => this.loadBootstrap(court.key),
+      this.sessionContext.tenant,
+      this.sessionContext.signal,
+    );
+    const bootstrap = await (shared ??
+      (this.bootstrap ??= this.loadBootstrap(court.key)));
     const path = `${bootstrap.base}catalog/getFacilityHours/${encodeURIComponent(bootstrap.key)}/${facilityId}/${rateTypeId}/${date}`;
     const url = new URL(path, this.config.catalogUrl);
     if (
@@ -89,8 +115,9 @@ export class CivicRecReader {
       url.href.length > 4096
     )
       return invalid();
-    const response = checked(
-      await this.http.request({
+    let calendarResponse: HttpResponse;
+    try {
+      calendarResponse = await this.http.request({
         court: court.key,
         purpose: "calendar",
         method: "GET",
@@ -101,8 +128,12 @@ export class CivicRecReader {
           cookie: bootstrap.cookie,
         },
         expect: "json",
-      }),
-    );
+      });
+    } catch (error) {
+      if (sessionRejected(error)) this.invalidateBootstrap();
+      throw error;
+    }
+    const response = checked(calendarResponse);
     if (
       Temporal.Instant.compare(response.requestedAt, bootstrap.receivedAt) < 0
     )
@@ -119,8 +150,10 @@ export class CivicRecReader {
       /expired|denied|unauthorized|forbidden|login required/i.test(
         payload.error,
       )
-    )
+    ) {
+      this.invalidateBootstrap();
       throw new ConnectorError("access_blocked");
+    }
     if (
       !object(payload) ||
       !Object.hasOwn(payload, "hours") ||
@@ -146,5 +179,9 @@ export class CivicRecReader {
       bootstrap.cookieValues,
     );
     return { evidence, receivedAt: response.receivedAt };
+  }
+
+  private invalidateBootstrap() {
+    invalidateSharedSession(this.sessionContext.http);
   }
 }

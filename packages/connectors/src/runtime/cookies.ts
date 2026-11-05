@@ -12,13 +12,13 @@ function pathMatches(path: string, requestPath: string): boolean {
   );
 }
 
-export function parseCookieJar(
+export function parseCookieJarWithExpiry(
   headers: Headers,
   url: URL,
   endpointPath: string,
   receivedAt: string,
   options: { cookieDomains: readonly string[] },
-): { header: string; values: string[] } {
+): { header: string; values: string[]; expiresAt: number | null } {
   if (!InstantSchema.safeParse(receivedAt).success)
     return fail("schema_changed");
   const rows = headers.getSetCookie();
@@ -31,7 +31,7 @@ export function parseCookieJar(
   const allowed = new Set(
     options.cookieDomains.map((domain) => domain.toLowerCase()),
   );
-  const jar = new Map<string, string>();
+  const jar = new Map<string, { value: string; expiresAt: number | null }>();
   for (const row of new Set(rows)) {
     const parts = row.split(";");
     const pair = parts.shift()!;
@@ -88,13 +88,46 @@ export function parseCookieJar(
       maxAge !== null
         ? maxAge <= 0
         : expires !== null && expires <= Date.parse(receivedAt);
-    if (!expired) jar.set(name, value);
+    if (!expired)
+      jar.set(name, {
+        value,
+        expiresAt:
+          maxAge !== null ? Date.parse(receivedAt) + maxAge * 1000 : expires,
+      });
   }
   if (!jar.size) return fail("access_blocked");
   return {
-    header: [...jar].map(([name, value]) => `${name}=${value}`).join("; "),
-    values: [...jar.values()].map((value) =>
+    header: [...jar]
+      .map(([name, cookie]) => `${name}=${cookie.value}`)
+      .join("; "),
+    values: [...jar.values()].map(({ value }) =>
       value.startsWith('"') ? value.slice(1, -1) : value,
     ),
+    expiresAt: [...jar.values()].reduce<number | null>(
+      (earliest, cookie) =>
+        cookie.expiresAt === null
+          ? earliest
+          : earliest === null
+            ? cookie.expiresAt
+            : Math.min(earliest, cookie.expiresAt),
+      null,
+    ),
   };
+}
+
+export function parseCookieJar(
+  headers: Headers,
+  url: URL,
+  endpointPath: string,
+  receivedAt: string,
+  options: { cookieDomains: readonly string[] },
+): { header: string; values: string[] } {
+  const { header, values } = parseCookieJarWithExpiry(
+    headers,
+    url,
+    endpointPath,
+    receivedAt,
+    options,
+  );
+  return { header, values };
 }

@@ -7,6 +7,7 @@ import type {
 import { bounded, transportFailure } from "./async.js";
 import { detectChallenge } from "./challenge.js";
 import { parseRetryAfter } from "./retry-after.js";
+import { rejectedChallenge } from "./rejected-challenge.js";
 
 const MAX_BYTES = 1024 * 1024;
 
@@ -18,6 +19,7 @@ export interface ResponseClock {
   abortError?: () => unknown;
   beforeDispose?: () => void;
   normalizeFailure?: (error: unknown) => unknown;
+  inspectRejectedChallenge?: boolean;
 }
 
 function checkStatus(
@@ -108,7 +110,28 @@ export async function processResponse(
     const bodyFirst =
       profile.classificationOrder === "legacy-body-first" &&
       response.status === 200;
-    if (!bodyFirst) checkStatus(response, profile, clock);
+    if (!bodyFirst) {
+      try {
+        checkStatus(response, profile, clock);
+      } catch (error) {
+        const bare401 =
+          clock.inspectRejectedChallenge &&
+          response.status === 401 &&
+          error instanceof ConnectorError &&
+          error.code === "access_blocked" &&
+          !profile.redirectHeaders.some((name) => response.headers.has(name));
+        if (
+          clock.inspectRejectedChallenge &&
+          error instanceof ConnectorError &&
+          (error.code === "http_error" || bare401)
+        ) {
+          if (await rejectedChallenge(response, profile, clock))
+            throw new ConnectorError("access_blocked");
+          if (bare401) throw new ConnectorError("http_error");
+        }
+        throw error;
+      }
+    }
     const length = checkLength(response, profile);
     if (!bodyFirst) checkType(response, expected, profile);
     if (!response.body && !bodyFirst)
@@ -158,11 +181,12 @@ export async function processResponse(
     if (request.expect === "json" && /^\s*</.test(text))
       throw new ConnectorError("access_blocked");
     if (
-      profile.challenge &&
-      (profile.challenge.scope === "all" ||
-        request.expect === "html" ||
-        /^\s*</.test(text)) &&
-      detectChallenge(text, profile.challenge)
+      (clock.inspectRejectedChallenge ||
+        (profile.challenge &&
+          (profile.challenge.scope === "all" ||
+            request.expect === "html" ||
+            /^\s*</.test(text)))) &&
+      detectChallenge(text, profile.challenge ?? {})
     )
       throw new ConnectorError("access_blocked");
     let body: unknown = text;

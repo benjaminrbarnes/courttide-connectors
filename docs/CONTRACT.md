@@ -133,8 +133,8 @@ method so a per-read lease includes parsing.
 
 For a profile with cookies, the runtime keeps bootstrap `Set-Cookie` rows only
 in memory and sends a cookie header only when it matches a scoped jar issued to
-that runtime. An unknown cookie is rejected before gate admission. Keep a
-stateful connector and its runtime together; callers still own session reuse.
+that runtime or imported from a scoped package-owned session. An unknown cookie
+is rejected before gate admission. See the platform README for supported reuse.
 
 Discovery and live checks use one gate per upstream site across courts, workers
 and iterations. `politeGate` serializes a site's requests in memory and waits
@@ -146,6 +146,68 @@ stops the gate. `GateOutcome.retryAfterMs` carries a supplied delay, and the
 runtime parses `Retry-After` for 429 responses; it does not forward that header
 for other error statuses. Scheduled production collection supplies its own gate
 and retains its existing cadence.
+
+HTTP admission and guarded dispatch require version 1.1.0 or later; version
+1.1.0 is unreleased. Each job still supplies its own gate and request authority.
+
+`createHttpAdmissionGate({ reserveUrl, outcomeUrlTemplate, sourceOrigin, bearer,
+localGate, serviceFetch?, signal? })` optionally combines a local gate with a
+shared HTTP admission service. Reuse the local gate for concurrent requests
+to that site; the service coordinates the shared budget. The reserve and
+outcome URLs must have the same HTTPS origin
+(HTTP loopback is supported for testing); configure exactly one source origin.
+The outcome URL template contains one `{reservationId}` path segment. The
+service receives a request purpose when reserving, and a bounded result and
+observed status when recording an outcome. The bearer is sent only in the
+service's authorization header. A deferral, malformed or lost service reply,
+failed outcome report, or mismatched source fails closed. There is no service
+retry or provider retry. Unknown and proven pre-fetch outcomes are never
+reported as successful; they do not imply that a reservation was refunded.
+
+The reserve POST body is `{ "purpose": "calendar" }`, using a contract request
+purpose. A successful reserve reply is either
+`{ result: "reserved", reservationId, allowanceOwner, budgetDate, used, cap, warningCrossed }`
+or `{ result: "deferred", deferUntil, operatorHold }`. IDs are UUIDs, the
+budget date is a UTC date, counts are nonnegative safe integers, and the cap is
+positive. A deferral's `deferUntil` is a UTC instant or null. Outcome POST
+bodies contain `result` (`success`, `rate_limited`, `access_blocked`, `http_error`, `unknown`
+or `not_sent`), optionally `status`, `errorCode` and `retryAfterMs`; error codes
+come from the connector contract. Retry delays are nonnegative safe integers;
+an invalid delay is omitted without suppressing a recognized block. A successful
+reply is `{ "recorded": true }`;
+an unauthorized or conflicting reply fails closed. The result is authoritative:
+an observed challenge remains `access_blocked` even when its status is 5xx.
+`unknown` and `not_sent` carry no status. The service receives neither a source
+URL nor provider credentials.
+
+This gate requires a runtime with ticket-bound dispatch support. On admission,
+the runtime passes the gate's exact `dispatch` function as the optional second
+`acquire` argument. The gate refuses admission without that capability. A
+dispatch hook must synchronously call the supplied `send` once and return that
+same promise. The runtime alone enters the actual fetch, marks that entry,
+rechecks its deadline and cookie proof, and rejects a substituted result or a
+late or repeated send. Ordinary gates without `dispatch` keep the existing
+one-argument acquire and fetch behavior. A controller must verify this runtime
+capability before enabling the HTTP gate; installing a gate beside an older
+runtime does not enable guarded dispatch.
+
+When a scoped session is combined with guarded dispatch, the selected session
+scope and cookie proof are checked again at the actual fetch entry. Expiry or
+invalidation before that entry prevents the fetch and reports `not_sent` for
+the already acquired reservation. Each job retains its own gate, signal and
+deadline even when it reuses a successful bootstrap proof.
+
+With guarded dispatch, the runtime inspects up to 64 KiB and 4,096 chunks for
+known challenge markers when a response would otherwise fail as an HTTP error,
+including a bare 401. A recognized challenge is reported as `access_blocked`
+with the observed status; an inconclusive or failed probe keeps the HTTP error.
+A bare 401 stops the current gate and is not reported as a shared host block.
+The probe uses the request deadline and cancels the body. Successfully read
+bodies use the ordinary size limit and are checked for known challenge markers.
+For a per-read lease, an observed 401, 403, 429, authentication failure or
+challenge remains the release outcome even if the read callback catches or
+replaces the request error. Ordinary gates retain their profile's existing
+response order.
 
 `leaseScope: "per_read"` releases after the whole read or identity check,
 including parsing, and reports its final outcome. `"per_request"` releases
@@ -276,6 +338,9 @@ shapes. New platform codes are documented by that platform and retain meaning.
 
 ## Provider setup and session reuse
 
+The optional `createSessionStore` API requires version 1.1.0 or later; version
+1.1.0 is unreleased. It supports anonymous, process-local reuse only.
+
 Minimize actual upstream requests. Reuse successful setup, bootstrap and
 authentication while their scope and validity still apply. Scope sessions to
 the configured origin, tenant and account, including the relevant transport and
@@ -287,8 +352,7 @@ Session state and request authority have separate lifetimes. A job's runtime,
 gate, lease, cancellation signal and deadline belong to that job. Sharing a
 session must not reuse another job's authority. Cookie proofs remain owned by
 the package: callers cannot manufacture valid setup by copying cookie strings
-into a new runtime. See the platform README for the implemented reuse boundary;
-this policy does not add a session-store API to the current release.
+into a new runtime. See the platform README for the implemented reuse boundary.
 
 Document measured cold and warm request counts, the reuse scope and local
 lifetime, known provider expiry signals, invalidation and any bounded renewal.
