@@ -36,7 +36,7 @@ does not schedule, retry, book or infer that unreported time is unavailable.
 ## Interfaces
 
 The package exports the TypeScript interfaces, Zod schemas, contextual reading
-validator and `CONTRACT_VERSION`, which is `"1"` throughout the 0.x releases.
+validator and `CONTRACT_VERSION`, which is `"1"`.
 Relative dates are `YYYY-MM-DD` in the tenant's IANA time zone; instants are
 UTC ISO 8601 strings.
 
