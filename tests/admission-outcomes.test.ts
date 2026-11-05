@@ -56,6 +56,23 @@ async function send(gate: Gate, outcome: GateOutcome) {
   await gate.release(ticket, outcome);
 }
 
+it.each([200, 401])(
+  "reports an authentication failure at %s without treating it as a host block",
+  async (status) => {
+    const { gate, bodies } = setup();
+    await send(gate, { ok: false, error: "auth_required", status });
+    expect(bodies[1]).toEqual({
+      result: "http_error",
+      status,
+      errorCode: "auth_required",
+    });
+    await expect(gate.acquire(request, gate.dispatch)).rejects.toBeInstanceOf(
+      AdmissionError,
+    );
+    expect(bodies).toHaveLength(2);
+  },
+);
+
 it.each([2_147_483_648, Number.MAX_SAFE_INTEGER])(
   "forwards a safe retry delay of %s milliseconds unchanged",
   async (retryAfterMs) => {

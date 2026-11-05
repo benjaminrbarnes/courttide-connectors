@@ -114,14 +114,21 @@ export async function processResponse(
       try {
         checkStatus(response, profile, clock);
       } catch (error) {
+        const bare401 =
+          clock.inspectRejectedChallenge &&
+          response.status === 401 &&
+          error instanceof ConnectorError &&
+          error.code === "access_blocked" &&
+          !profile.redirectHeaders.some((name) => response.headers.has(name));
         if (
           clock.inspectRejectedChallenge &&
-          response.status >= 500 &&
           error instanceof ConnectorError &&
-          error.code === "http_error" &&
-          (await rejectedChallenge(response, profile, clock))
-        )
-          throw new ConnectorError("access_blocked");
+          (error.code === "http_error" || bare401)
+        ) {
+          if (await rejectedChallenge(response, profile, clock))
+            throw new ConnectorError("access_blocked");
+          if (bare401) throw new ConnectorError("http_error");
+        }
         throw error;
       }
     }
@@ -174,11 +181,12 @@ export async function processResponse(
     if (request.expect === "json" && /^\s*</.test(text))
       throw new ConnectorError("access_blocked");
     if (
-      profile.challenge &&
-      (profile.challenge.scope === "all" ||
-        request.expect === "html" ||
-        /^\s*</.test(text)) &&
-      detectChallenge(text, profile.challenge)
+      (clock.inspectRejectedChallenge ||
+        (profile.challenge &&
+          (profile.challenge.scope === "all" ||
+            request.expect === "html" ||
+            /^\s*</.test(text)))) &&
+      detectChallenge(text, profile.challenge ?? {})
     )
       throw new ConnectorError("access_blocked");
     let body: unknown = text;

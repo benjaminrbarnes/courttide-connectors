@@ -430,9 +430,11 @@ export function createConnectorRuntime(
       if (
         scope &&
         dispatch &&
-        (status === 403 ||
+        (status === 401 ||
+          status === 403 ||
           status === 429 ||
           failure.code === "access_blocked" ||
+          failure.code === "auth_required" ||
           failure.code === "rate_limited")
       )
         scope.stop = { failure, status };

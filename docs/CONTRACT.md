@@ -197,13 +197,17 @@ invalidation before that entry prevents the fetch and reports `not_sent` for
 the already acquired reservation. Each job retains its own gate, signal and
 deadline even when it reuses a successful bootstrap proof.
 
-With guarded dispatch, the runtime also inspects up to 64 KiB and 4,096
-chunks of a 5xx response for known challenge markers. A recognized challenge
-is reported as `access_blocked` with the observed status; an inconclusive or
-failed probe keeps the original HTTP error. The probe uses the request deadline
-and cancels the body. For a per-read lease, an observed 403, 429 or challenge
-remains the release outcome even if the read callback catches or replaces the
-request error. Ordinary gates retain their profile's existing response order.
+With guarded dispatch, the runtime inspects up to 64 KiB and 4,096 chunks for
+known challenge markers when a response would otherwise fail as an HTTP error,
+including a bare 401. A recognized challenge is reported as `access_blocked`
+with the observed status; an inconclusive or failed probe keeps the HTTP error.
+A bare 401 stops the current gate and is not reported as a shared host block.
+The probe uses the request deadline and cancels the body. Successfully read
+bodies use the ordinary size limit and are checked for known challenge markers.
+For a per-read lease, an observed 401, 403, 429, authentication failure or
+challenge remains the release outcome even if the read callback catches or
+replaces the request error. Ordinary gates retain their profile's existing
+response order.
 
 `leaseScope: "per_read"` releases after the whole read or identity check,
 including parsing, and reports its final outcome. `"per_request"` releases

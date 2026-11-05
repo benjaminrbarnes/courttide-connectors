@@ -42,6 +42,7 @@ function sameRequest(left: GateRequest, right: GateRequest): boolean {
 
 function stop(outcome: GateOutcome): boolean {
   return (
+    outcome.status === 401 ||
     outcome.status === 403 ||
     outcome.status === 429 ||
     outcome.error === "access_blocked" ||
@@ -71,7 +72,7 @@ function reportBody(state: State, outcome: GateOutcome | undefined): object {
     return { result: "unknown" };
   const errorCode = outcome.ok ? undefined : outcome.error;
   const retryAfterMs = outcome.retryAfterMs ?? undefined;
-  if (outcome.error === "access_blocked" || outcome.error === "auth_required")
+  if (outcome.error === "access_blocked")
     return {
       result: "access_blocked",
       status,
@@ -142,6 +143,7 @@ export function createHttpAdmissionGate(options: HttpAdmissionOptions): Gate {
         : { ok: false, error: "http_error" };
     if (
       stop(localOutcome) ||
+      parsed?.status === 401 ||
       ("result" in body &&
         ["unknown", "rate_limited", "access_blocked"].includes(
           String(body.result),

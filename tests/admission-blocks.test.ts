@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import {
   AdmissionError,
   activeNetLegacyProfile,
+  ConnectorError,
   createHttpAdmissionGate,
 } from "../packages/connectors/src/index.js";
 import { createRecordingGate } from "../packages/connectors/src/testing/index.js";
@@ -40,6 +41,163 @@ function admission() {
   return { gate, calls, local };
 }
 const challenge = "<html><title>Just a moment</title></html>";
+
+it.each([401, 400, 404, 201])(
+  "reports a challenge observed with status %s and stops before another fetch",
+  async (status) => {
+    const { gate, calls } = admission();
+    const response = new Response(challenge, {
+      status,
+      headers: { "content-type": "text/html" },
+    });
+    const read = vi.spyOn(response.body!, "getReader");
+    const provider = vi.fn<typeof fetch>(async () => response);
+    const profile = {
+      ...activeNetLegacyProfile,
+      successStatuses: "200-only" as const,
+    };
+    const client = runtime(activeTenant, profile, gate, provider);
+    await expect(client.http.request(activeRequest())).rejects.toMatchObject({
+      code: "access_blocked",
+    });
+    expect(read).toHaveBeenCalledOnce();
+    expect(calls).toEqual([
+      { purpose: "calendar" },
+      { result: "access_blocked", status, errorCode: "access_blocked" },
+    ]);
+    await expect(client.http.request(activeRequest())).rejects.toBeInstanceOf(
+      AdmissionError,
+    );
+    expect(provider).toHaveBeenCalledOnce();
+  },
+);
+
+it.each(["plain", "incomplete"] as const)(
+  "reports an inconclusive %s 401 without retrying or claiming a host block",
+  async (kind) => {
+    const { gate, calls } = admission();
+    const body =
+      kind === "plain"
+        ? "Authorization required"
+        : new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("<title>Just a"));
+            },
+            pull(controller) {
+              controller.error(new Error("synthetic stream failure"));
+            },
+          });
+    const provider = vi.fn<typeof fetch>(
+      async () => new Response(body, { status: 401 }),
+    );
+    const client = runtime(
+      activeTenant,
+      activeNetLegacyProfile,
+      gate,
+      provider,
+    );
+    await expect(client.http.request(activeRequest())).rejects.toMatchObject({
+      code: "http_error",
+    });
+    expect(calls).toEqual([
+      { purpose: "calendar" },
+      { result: "http_error", status: 401, errorCode: "http_error" },
+    ]);
+    expect(provider).toHaveBeenCalledOnce();
+    const original = activeRequest();
+    const request = {
+      court: original.court,
+      purpose: original.purpose,
+      method: original.method,
+      url: original.url.href,
+    };
+    await expect(gate.acquire(request, gate.dispatch)).rejects.toBeInstanceOf(
+      AdmissionError,
+    );
+    expect(calls).toHaveLength(2);
+    expect(provider).toHaveBeenCalledOnce();
+  },
+);
+
+it("retains ordinary gate 401 classification without reading its body", async () => {
+  const local = createRecordingGate();
+  const response = new Response(challenge, { status: 401 });
+  const read = vi.spyOn(response.body!, "getReader");
+  const client = runtime(
+    activeTenant,
+    activeNetLegacyProfile,
+    local.gate,
+    async () => response,
+  );
+  await expect(client.http.request(activeRequest())).rejects.toMatchObject({
+    code: "access_blocked",
+  });
+  expect(read).not.toHaveBeenCalled();
+});
+
+it.each([
+  { status: 401, code: "http_error" },
+  { status: 200, code: "auth_required" },
+] as const)(
+  "retains a caught authentication failure at $status without reporting a host block",
+  async ({ status, code }) => {
+    const { gate, calls } = admission();
+    const provider = vi.fn<typeof fetch>(
+      async () =>
+        new Response("{}", {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const profile = {
+      ...activeNetLegacyProfile,
+      classify() {
+        throw new ConnectorError("auth_required");
+      },
+    };
+    const client = runtime(activeTenant, profile, gate, provider, {
+      leaseScope: "per_read",
+    });
+    await expect(
+      client.execute(async () => {
+        await expect(
+          client.http.request(activeRequest()),
+        ).rejects.toMatchObject({ code });
+        return "handled";
+      }),
+    ).resolves.toBe("handled");
+    expect(calls[1]).toEqual({ result: "http_error", status, errorCode: code });
+    await expect(
+      client.execute(() => client.http.request(activeRequest())),
+    ).rejects.toBeInstanceOf(AdmissionError);
+    expect(provider).toHaveBeenCalledOnce();
+  },
+);
+
+it("recognizes a non-leading challenge marker in a successful JSON response", async () => {
+  const { gate, calls } = admission();
+  const body = JSON.stringify({ message: "<form id='challenge-form'></form>" });
+  const provider = vi.fn<typeof fetch>(
+    async () =>
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  const client = runtime(activeTenant, activeNetLegacyProfile, gate, provider);
+  await expect(client.http.request(activeRequest())).rejects.toMatchObject({
+    code: "access_blocked",
+  });
+  expect(calls[1]).toEqual({
+    result: "access_blocked",
+    status: 200,
+    errorCode: "access_blocked",
+  });
+  await expect(client.http.request(activeRequest())).rejects.toBeInstanceOf(
+    AdmissionError,
+  );
+  expect(provider).toHaveBeenCalledOnce();
+});
 
 it("reports a 503 challenge body with its observed status and stops before another fetch", async () => {
   const { gate, calls } = admission();
@@ -87,6 +245,13 @@ it("retains the ordinary gate's non-200 status-before-body behavior", async () =
 });
 
 it.each([
+  {
+    status: 401,
+    body: challenge,
+    headers: new Headers(),
+    result: "access_blocked",
+    code: "access_blocked",
+  },
   {
     status: 200,
     body: challenge,
