@@ -19,7 +19,7 @@ const capabilities = {
   maxDaysPerRead: 1,
   leaseScope: "per_request",
   requests: { perRead: 1, perSessionBootstrap: 0 },
-  minimumGapMs: 10000,
+  minimumGapMs: 2500,
   identity: "none",
   bookingWrites: false,
 } as const;

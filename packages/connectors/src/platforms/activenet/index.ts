@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { ATTRIBUTION } from "../../contract/constants.js";
+import {
+  ATTRIBUTION,
+  DEFAULT_DEVELOPMENT_GAP_MS,
+} from "../../contract/constants.js";
 import { ConnectorError } from "../../contract/errors.js";
 import type {
   Capabilities,
@@ -36,7 +39,7 @@ const capabilities: Capabilities = {
   maxDaysPerRead: 7,
   leaseScope: "per_read",
   requests: { perRead: 1, perSessionBootstrap: 0 },
-  minimumGapMs: 10_000,
+  minimumGapMs: DEFAULT_DEVELOPMENT_GAP_MS,
   identity: "label_check",
   bookingWrites: false,
 };

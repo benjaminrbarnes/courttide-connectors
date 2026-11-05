@@ -48,7 +48,7 @@ optional allowed subset, an HTTP client, `now()` and an optional abort signal.
 Every clock read comes from `now()`.
 
 `Capabilities` states `auth: "none"`, the read shape, maximum days per read,
-`leaseScope`, estimated request counts, minimum gap of at least 10 seconds,
+`leaseScope`, estimated request counts, minimum gap of at least 2 seconds,
 identity mode and `bookingWrites: false`. `readCourt` accepts one allowed key
 and an inclusive date range. Invalid or disallowed keys throw
 `identity_mismatch` before a request or gate call; unsupported ranges throw
@@ -136,15 +136,16 @@ in memory and sends a cookie header only when it matches a scoped jar issued to
 that runtime. An unknown cookie is rejected before gate admission. Keep a
 stateful connector and its runtime together; callers still own session reuse.
 
-Discovery and live checks share one gate per connector and upstream target
-across courts, workers and iterations. Requests are at least 10 seconds apart,
-with ceilings of 6 per rolling minute, 20 per rolling 10 minutes and 30 per
-rolling hour. These are limits, not quotas. Separate processes coordinate through
-the caller's existing admission, gate, lease, priority and backoff.
-`politeGate` provides those limits in memory for development: share the same
-instance among concurrent clients for an upstream target. A rate limit rejects
-queued work and enforces a backoff; an access block stops the gate. Scheduled
-production collection supplies its own gate and retains its existing cadence.
+Discovery and live checks use one gate per upstream site across courts, workers
+and iterations. `politeGate` serializes a site's requests in memory and waits
+2.5 seconds by default, with a configurable minimum of 2 seconds. Share the
+same instance among concurrent clients for that site, and coordinate separate
+local processes to maintain the same pacing. A failed outcome defers queued
+work for at least 60 seconds or a longer supplied retry delay; an access block
+stops the gate. `GateOutcome.retryAfterMs` carries a supplied delay, and the
+runtime parses `Retry-After` for 429 responses; it does not forward that header
+for other error statuses. Scheduled production collection supplies its own gate
+and retains its existing cadence.
 
 `leaseScope: "per_read"` releases after the whole read or identity check,
 including parsing, and reports its final outcome. `"per_request"` releases

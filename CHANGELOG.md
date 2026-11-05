@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Use a 2.5-second default and 2-second minimum for local development pacing.
+- Share CLI admission by site and back off after failed reads or supplied retry delays.
+- Remove superseded rolling development ceilings without changing scheduled caller controls.
+
 ## 0.1.1
 
 - Preserve native ActiveNet timeout signals and CivicRec cancellation reasons.

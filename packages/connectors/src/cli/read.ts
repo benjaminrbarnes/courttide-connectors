@@ -1,4 +1,7 @@
-import { ATTRIBUTION } from "../contract/constants.js";
+import {
+  ATTRIBUTION,
+  DEFAULT_DEVELOPMENT_GAP_MS,
+} from "../contract/constants.js";
 import { ConnectorError } from "../contract/errors.js";
 import { isIP } from "node:net";
 import type {
@@ -125,28 +128,62 @@ function makeFetch(
   };
 }
 
-export function createCliGate(minimumGapMs: number): ReadExecution {
+export function createCliGate(
+  minimumGapMs = DEFAULT_DEVELOPMENT_GAP_MS,
+  siteMinimums: ReadonlyMap<string, number> = new Map(),
+): ReadExecution {
   const calls: Record<string, unknown>[] = [];
-  const gate = politeGate({ minimumGapMs: Math.max(10_000, minimumGapMs) });
+  const sites = new Map<string, Gate>();
   let index = 0;
-  const tickets = new WeakMap<object, number>();
+  const tickets = new WeakMap<object, { id: number; gate: Gate }>();
   const recording: Gate = {
     async acquire(request: GateRequest) {
+      if (typeof request.url !== "string" || request.url.length > 4_096)
+        throw new Error("Invalid gate request URL");
+      let url: URL;
+      try {
+        url = new URL(request.url);
+      } catch {
+        throw new Error("Invalid gate request URL");
+      }
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password
+      )
+        throw new Error("Invalid gate request URL");
+      const site = url.origin;
+      let gate = sites.get(site);
+      if (!gate) {
+        gate = politeGate({
+          minimumGapMs: Math.max(
+            DEFAULT_DEVELOPMENT_GAP_MS,
+            minimumGapMs,
+            siteMinimums.get(site) ?? 0,
+          ),
+        });
+        sites.set(site, gate);
+      }
       calls.push({
         type: "acquire",
         request: { ...request },
       });
       const ticket = await gate.acquire(request);
       const id = ++index;
-      tickets.set(ticket as object, id);
+      tickets.set(ticket as object, { id, gate });
       return ticket;
     },
     async release(ticket: unknown, outcome: GateOutcome) {
-      const id =
+      const entry =
         ticket && typeof ticket === "object" ? tickets.get(ticket) : undefined;
-      if (id === undefined) throw new Error("Unknown gate ticket");
-      calls.push({ type: "release", ticket: id, outcome: { ...outcome } });
-      await gate.release(ticket, outcome);
+      if (!entry) throw new Error("Unknown gate ticket");
+      calls.push({
+        type: "release",
+        ticket: entry.id,
+        outcome: { ...outcome },
+      });
+      await entry.gate.release(ticket, outcome);
+      tickets.delete(ticket as object);
     },
   };
   return { gate: recording, requestLog: [], gateLog: calls, responses: [] };
