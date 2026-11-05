@@ -9,7 +9,19 @@ is part of this connector.
 The bootstrap's session key and cookie are secrets. They stay in memory, bind to
 the runtime instance and never appear in a reading. Bootstrap is cached per
 connector, including a failure; a block or expired session does not trigger a
-retry or rebootstrap. Keep the connector and runtime together for session reuse.
+retry or rebootstrap. Reuse that connector/runtime pair only within the same
+request-authority lifetime: retaining it across unrelated jobs would also
+retain its original gate and cancellation signal. The current release has no
+cross-runtime session-store API; copying cookies into another runtime is not
+supported.
+
+With a valid bootstrap in the same connector, each date adds one hours request;
+a new connector also needs its bootstrap request. These are implementation call
+shapes, not measured provider-session lifetimes. No server session TTL or logout
+protocol is established by the connector. A future shared session must retain
+the original setup provenance and package cookie proofs while each job keeps
+its own runtime and admission. Follow the [session lifecycle
+contract](../../docs/CONTRACT.md#provider-setup-and-session-reuse).
 
 A successful day reports `status: 200`, partial coverage and
 `continuous_ranges` evidence. Only reported non-block ranges are candidates for

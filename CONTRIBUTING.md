@@ -25,6 +25,12 @@ worker leases. Deployed callers retain their existing budgets, admission,
 leases and backoff. Live
 checks never run in CI.
 
+Follow the [provider-session contract](docs/CONTRACT.md#provider-setup-and-session-reuse):
+reuse valid setup within its verified scope, count every actual request across
+the caller's host budget and keep each job's admission authority separate.
+Document measured cold/warm calls and lifecycle behavior without publishing
+private evidence. A cached response is not a fresh upstream observation.
+
 Before requesting review:
 
 - Run `npm run check` and the platform's conformance test.

@@ -66,6 +66,10 @@ Only generic shapes and invented examples belong in this repository.
    to the configured origin and tenant. Use the injected `HttpClient`; do not
    call `fetch` in a connector. Use the supplied runtime for bounded responses,
    leases and the gate. Never implement booking calls or retries.
+   Follow the [session lifecycle contract](CONTRACT.md#provider-setup-and-session-reuse).
+   Record cold/warm call counts, scope, local lifetime, expiry/invalidation and
+   single-flight behavior. Keep each job's gate and cancellation authority
+   separate from reusable setup; test these boundaries with synthetic responses.
 4. Add the package subpath export in `packages/connectors/package.json`, using
    `./dist/platforms/<id>/index.d.ts` for `types` and
    `./dist/platforms/<id>/index.js` for `default`. Add a

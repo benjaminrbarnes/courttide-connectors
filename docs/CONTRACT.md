@@ -274,6 +274,44 @@ their raised order, then `source_hidden_or_unavailable` when hidden, then
 `reported_starts_only` and `reported_reservations_only` are reserved for later
 shapes. New platform codes are documented by that platform and retain meaning.
 
+## Provider setup and session reuse
+
+Minimize actual upstream requests. Reuse successful setup, bootstrap and
+authentication while their scope and validity still apply. Scope sessions to
+the configured origin, tenant and account, including the relevant transport and
+configuration identity. Never share one tenant's or account's session with
+another. Share in-flight setup only within that same scope; a failed setup is
+not reusable session state.
+
+Session state and request authority have separate lifetimes. A job's runtime,
+gate, lease, cancellation signal and deadline belong to that job. Sharing a
+session must not reuse another job's authority. Cookie proofs remain owned by
+the package: callers cannot manufacture valid setup by copying cookie strings
+into a new runtime. See the platform README for the implemented reuse boundary;
+this policy does not add a session-store API to the current release.
+
+Document measured cold and warm request counts, the reuse scope and local
+lifetime, known provider expiry signals, invalidation and any bounded renewal.
+Distinguish provider evidence from caller policy: an unknown server lifetime
+stays unknown. Ordinary errors, timeouts, rate limits, blocks and challenges do
+not by themselves prove that another login is needed. Do not create an
+authentication or bootstrap retry loop; any caller-controlled retry must pass
+admission and backoff again.
+
+All actual outbound attempts count toward the caller's shared host budget,
+including setup, authentication, metadata, calendars, redirects and retries.
+Coordinate independent workers and local/manual callers through the same
+authoritative budget. A conservative charged reservation after cancellation or
+an uncertain send is distinct from a proven HTTP transmission. Report the
+configured warning crossing and the first block/rate-limit response through
+the caller's existing alerts; a connector adds no monitoring timer.
+
+Preserve the original setup and response provenance when reusing state. Cached
+HTTP bytes are not a new upstream read and must never be presented as one.
+Keep credentials, cookies and session material out of readings, logs and
+fixtures. Test scoped reuse, concurrency, expiry, failed setup and invalidation
+with synthetic responses, while preserving the platform's ordinary outputs.
+
 ## Conformance
 
 `@courttide/connectors/testing` exports `runConformance`, a scripted fake
