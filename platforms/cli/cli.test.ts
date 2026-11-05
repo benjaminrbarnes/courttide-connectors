@@ -132,7 +132,7 @@ describe("connector CLI", () => {
       expect(status, output.err.join("; ")).toBe(0);
       expect(requestStarts).toHaveLength(2);
       expect(requestStarts[1]! - requestStarts[0]!).toBeGreaterThanOrEqual(
-        9_500,
+        2_400,
       );
       expect(output.out.join("\n")).toContain(
         "Read with courttide-connectors by CourtTide",

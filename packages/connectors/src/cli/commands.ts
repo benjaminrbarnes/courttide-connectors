@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { Temporal } from "@js-temporal/polyfill";
+import { DEFAULT_DEVELOPMENT_GAP_MS } from "../contract/constants.js";
 import { TenantConfigSchema } from "../contract/schemas.js";
 import { validateCourtReading } from "../contract/validation.js";
 import type { Platform, TenantConfig } from "../contract/types.js";
@@ -20,7 +21,11 @@ import {
   writeLiveReport,
   writeRecording,
 } from "./record.js";
-import { conformanceFixturePath, listPlatforms } from "./registry.js";
+import {
+  conformanceFixturePath,
+  getPlatform,
+  listPlatforms,
+} from "./registry.js";
 import { CliExit, type CliIO, type ReadOptions } from "./types.js";
 
 const creditLine =
@@ -81,7 +86,11 @@ async function commandRecord(
   const options = parseReadOptions(parsed);
   const name = singleOption(parsed.values, "case", true)!;
   preflightRecordingDestination(io.cwd, name);
-  const execution = createCliGate(10_000);
+  const tenant = loadConfig(options.config, io.cwd);
+  const platform = getPlatform(options.platform);
+  const execution = createCliGate(
+    validatePlatformConfig(tenant, platform).minimumGapMs,
+  );
   execution.captureResponses = true;
   const result = await readCourt(options, io, execution);
   const path = await writeRecording(
@@ -236,6 +245,7 @@ async function commandTestLive(
     options: ReadOptions;
     tenant: TenantConfig;
     platform: Platform;
+    minimumGapMs: number;
   }[] = [];
   const foundCourts = new Set<string>();
   for (const file of files) {
@@ -270,6 +280,7 @@ async function commandTestLive(
         },
         tenant,
         platform,
+        minimumGapMs: capabilities.minimumGapMs,
       });
     }
   }
@@ -281,14 +292,15 @@ async function commandTestLive(
     );
   if (!targets.length)
     throw new Error("No matching configured court was selected");
-  const execution = createCliGate(
-    Math.max(
-      ...targets.map(
-        (target) =>
-          validatePlatformConfig(target.tenant, target.platform).minimumGapMs,
-      ),
-    ),
-  );
+  const siteMinimums = new Map<string, number>();
+  for (const target of targets) {
+    const site = target.tenant.origin;
+    siteMinimums.set(
+      site,
+      Math.max(siteMinimums.get(site) ?? 0, target.minimumGapMs),
+    );
+  }
+  const execution = createCliGate(DEFAULT_DEVELOPMENT_GAP_MS, siteMinimums);
   const counts = {
     selected: targets.length,
     passed: 0,

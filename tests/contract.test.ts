@@ -134,7 +134,7 @@ describe("contract schemas", () => {
       maxDaysPerRead: 1,
       leaseScope: "per_read",
       requests: { perRead: 1, perSessionBootstrap: 0 },
-      minimumGapMs: 10000,
+      minimumGapMs: 2500,
       identity: "none",
       bookingWrites: false,
     };
@@ -144,9 +144,13 @@ describe("contract schemas", () => {
         .success,
     ).toBe(false);
     expect(
-      CapabilitiesSchema.safeParse({ ...capabilities, minimumGapMs: 9999 })
+      CapabilitiesSchema.safeParse({ ...capabilities, minimumGapMs: 1999 })
         .success,
     ).toBe(false);
+    expect(
+      CapabilitiesSchema.safeParse({ ...capabilities, minimumGapMs: 2000 })
+        .success,
+    ).toBe(true);
     expect(new ConnectorError("schema_changed").name).toBe("ConnectorError");
     expect(new GateDeferred("2026-11-04T00:00:00.000Z", "pacing").name).toBe(
       "GateDeferred",

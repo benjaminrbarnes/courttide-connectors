@@ -1,4 +1,8 @@
 import { ConnectorError, GateDeferred } from "../contract/errors.js";
+import {
+  DEFAULT_DEVELOPMENT_GAP_MS,
+  MINIMUM_DEVELOPMENT_GAP_MS,
+} from "../contract/constants.js";
 import type { Gate, GateOutcome, GateRequest } from "../contract/types.js";
 
 interface Waiter {
@@ -6,21 +10,21 @@ interface Waiter {
   reject(error: Error): void;
 }
 
-export function politeGate(options: {
-  minimumGapMs: number;
-  monotonicNow?: () => number;
-  wallNow?: () => Date;
-}): Gate {
-  if (!Number.isFinite(options.minimumGapMs) || options.minimumGapMs < 10_000)
-    throw new RangeError("minimumGapMs must be at least 10000");
+export function politeGate(
+  options: {
+    minimumGapMs?: number;
+    monotonicNow?: () => number;
+    wallNow?: () => Date;
+  } = {},
+): Gate {
+  const minimumGapMs = options.minimumGapMs ?? DEFAULT_DEVELOPMENT_GAP_MS;
+  if (
+    !Number.isFinite(minimumGapMs) ||
+    minimumGapMs < MINIMUM_DEVELOPMENT_GAP_MS
+  )
+    throw new RangeError("minimumGapMs must be at least 2000");
   const now = options.monotonicNow ?? (() => performance.now());
   const wallNow = options.wallNow ?? (() => new Date());
-  const windows = [
-    { count: 6, ms: 60_000 },
-    { count: 20, ms: 600_000 },
-    { count: 30, ms: 3_600_000 },
-  ];
-  const starts: number[] = [];
   const queue: Waiter[] = [];
   let current: object | undefined;
   let nextGap = -Infinity;
@@ -48,23 +52,15 @@ export function politeGate(options: {
         waiter.reject(deferUntil(backoffUntil));
       return;
     }
-    while (starts.length && starts[0]! <= time - 3_600_000) starts.shift();
-    let due = nextGap;
-    for (const window of windows) {
-      const recent = starts.filter((start) => start > time - window.ms);
-      if (recent.length >= window.count)
-        due = Math.max(due, recent[recent.length - window.count]! + window.ms);
-    }
-    if (due > time) {
+    if (nextGap > time) {
       if (timer !== undefined) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = undefined;
         drain();
-      }, due - time);
+      }, nextGap - time);
       return;
     }
     current = {};
-    starts.push(time);
     queue.shift()!.resolve(current);
   }
 
@@ -80,9 +76,13 @@ export function politeGate(options: {
         throw new Error("Unknown or already released gate ticket");
       current = undefined;
       const time = now();
-      nextGap = time + options.minimumGapMs;
-      if (!outcome.ok && outcome.error === "access_blocked") blocked = true;
-      if (!outcome.ok && outcome.error === "rate_limited") {
+      nextGap = time + minimumGapMs;
+      if (
+        !outcome.ok &&
+        (outcome.error === "access_blocked" || outcome.status === 403)
+      )
+        blocked = true;
+      else if (!outcome.ok) {
         const delay =
           typeof outcome.retryAfterMs === "number" &&
           Number.isFinite(outcome.retryAfterMs) &&

@@ -1,5 +1,8 @@
 import { Temporal } from "@js-temporal/polyfill";
-import { ATTRIBUTION } from "../../contract/constants.js";
+import {
+  ATTRIBUTION,
+  DEFAULT_DEVELOPMENT_GAP_MS,
+} from "../../contract/constants.js";
 import { ConnectorError } from "../../contract/errors.js";
 import type {
   Capabilities,
@@ -30,7 +33,7 @@ const capabilities: Capabilities = {
   maxDaysPerRead: 2,
   leaseScope: "per_request",
   requests: { perRead: 2, perSessionBootstrap: 1 },
-  minimumGapMs: 10000,
+  minimumGapMs: DEFAULT_DEVELOPMENT_GAP_MS,
   identity: "none",
   bookingWrites: false,
 };

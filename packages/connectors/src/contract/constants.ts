@@ -1,4 +1,6 @@
 export const CONTRACT_VERSION = "1" as const;
+export const MINIMUM_DEVELOPMENT_GAP_MS = 2_000;
+export const DEFAULT_DEVELOPMENT_GAP_MS = 2_500;
 export const ATTRIBUTION = {
   text: "Read with courttide-connectors by CourtTide",
   url: "https://courttide.com",

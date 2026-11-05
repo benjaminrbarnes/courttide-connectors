@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { z } from "zod";
-import { ATTRIBUTION } from "./constants.js";
+import { ATTRIBUTION, MINIMUM_DEVELOPMENT_GAP_MS } from "./constants.js";
 import type { ConnectorError } from "./errors.js";
 
 export const LocalDateSchema = z.iso.date();
@@ -73,7 +73,7 @@ export const CapabilitiesSchema = z.strictObject({
     perRead: z.int().nonnegative(),
     perSessionBootstrap: z.int().nonnegative(),
   }),
-  minimumGapMs: z.int().min(10000),
+  minimumGapMs: z.int().min(MINIMUM_DEVELOPMENT_GAP_MS),
   identity: z.enum(["label_check", "none"]),
   bookingWrites: z.literal(false),
 });

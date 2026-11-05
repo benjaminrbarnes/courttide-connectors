@@ -74,12 +74,13 @@ conformance fixtures and the repository data guard. With no paths, it checks
 
 `test:live --config <dir> [--platform <id>] [--courts <key,...>] [--date YYYY-MM-DD] [--days N]`
 runs bounded integration reads using the current date in each config's time
-zone unless a date is selected. The CLI's `politeGate` applies its minimum-gap,
-rolling-window, block and backoff caps within the invocation. Coordinate
-human-paced reads across local workers, sessions and iterations, leaving at
-least 10 seconds between requests and staying within 6 per rolling minute, 20
-per rolling 10 minutes and 30 per rolling hour. Honor `Retry-After` and stop on
-a block or challenge. This
+zone unless a date is selected. The CLI shares a `politeGate` per origin within
+the invocation, using a 2.5-second default gap and respecting a platform's
+longer declared minimum. Coordinate reads across local workers, sessions and
+iterations, leaving roughly 2–3 seconds between requests per site and at least
+2 seconds. The gate backs off after failures and honors a retry delay supplied
+in the outcome; the runtime parses `Retry-After` for 429 responses. Stop on the
+first 403, 429 or challenge. This
 local command does not require production database access, production
 transactions, SSH access or worker leases. Deployed callers keep their existing
 budgets, admission, leases and backoff. It refuses to run in CI, stops after

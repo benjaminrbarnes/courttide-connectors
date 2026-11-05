@@ -23,13 +23,12 @@ hold, waitlist, booking, payment or checkout. Observe calls made by the page;
 never invent an endpoint. Stop at the first 403, 429 or challenge and do not
 bypass it.
 
-For local discovery and `test:live`, coordinate human-paced reads per connector
-and upstream target across courts, local workers, sessions and iterations. Wait
-at least 10 seconds between requests and stay within 6 per rolling minute, 20
-per rolling 10 minutes and 30 per rolling hour. These are ceilings, not quotas.
-The CLI's `politeGate` applies its local caps; coordinate separate local
-processes so their combined activity stays within the same ceilings. Honor
-`Retry-After` and stop at a block or challenge. Local checks do not require
+For local discovery and `test:live`, coordinate human-paced reads per upstream
+site across courts, local workers, sessions and iterations. Wait roughly 2–3
+seconds between requests, with a 2.5-second default and a 2-second minimum.
+The CLI shares a `politeGate` per origin within a run; coordinate separate local
+processes so their combined activity follows the same pacing. Honor
+`Retry-After` and stop at the first 403, 429 or challenge. Local checks do not require
 production database access, production transactions, SSH access or worker
 leases. Deployed callers keep their existing budgets, admission, leases and
 backoff.
