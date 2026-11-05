@@ -11,6 +11,10 @@ never appear in a reading. By default, bootstrap is cached per connector,
 including a failure. Keep that connector and runtime within one job's authority
 lifetime; retaining them would also retain the job's gate and signal.
 
+Cross-job session reuse requires version 1.1.0 or later; version 1.1.0 is
+unreleased. The store is anonymous-only and process-local; it does not
+coordinate sessions between processes.
+
 To reuse a successful anonymous bootstrap across jobs in one process, create
 `createSessionStore({ maxAgeMs })` and pass the store as `sessionStore` to each
 job's `createConnectorRuntime`. Each job still creates its own runtime, gate and

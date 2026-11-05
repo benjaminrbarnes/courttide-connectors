@@ -4,6 +4,9 @@ Open-source, read-only connectors for court availability. See the repository's
 [supported platforms and quick start](https://github.com/benjaminrbarnes/courttide-connectors#supported-platforms)
 and [connector contract](https://github.com/benjaminrbarnes/courttide-connectors/blob/main/docs/CONTRACT.md).
 
+Optional HTTP admission and process-local anonymous session reuse require
+version 1.1.0 or later. Version 1.1.0 is unreleased.
+
 When you display data, please keep its `attribution` field and include:
 
 Court times read with [courttide-connectors](https://github.com/benjaminrbarnes/courttide-connectors) by [CourtTide](https://courttide.com).

@@ -94,6 +94,8 @@ that option the selected read uses the configured provider origin.
 
 ## Optional shared admission
 
+This feature requires version 1.1.0 or later; version 1.1.0 is unreleased.
+
 The CLI can use an HTTP admission service in addition to its local per-site
 gate. Set all four environment variables together before `read`, `record` or
 `test:live`:

@@ -147,6 +147,9 @@ runtime parses `Retry-After` for 429 responses; it does not forward that header
 for other error statuses. Scheduled production collection supplies its own gate
 and retains its existing cadence.
 
+HTTP admission and guarded dispatch require version 1.1.0 or later; version
+1.1.0 is unreleased. Each job still supplies its own gate and request authority.
+
 `createHttpAdmissionGate({ reserveUrl, outcomeUrlTemplate, sourceOrigin, bearer,
 localGate, serviceFetch?, signal? })` optionally combines a local gate with a
 shared HTTP admission service. Reuse the local gate for concurrent requests
@@ -166,9 +169,8 @@ purpose. A successful reserve reply is either
 `{ result: "reserved", reservationId, allowanceOwner, budgetDate, used, cap, warningCrossed }`
 or `{ result: "deferred", deferUntil, operatorHold }`. IDs are UUIDs, the
 budget date is a UTC date, counts are nonnegative safe integers, and the cap is
-positive. A
-deferral's `deferUntil` is a UTC instant or null. Outcome POST bodies contain
-`result` (`success`, `rate_limited`, `access_blocked`, `http_error`, `unknown`
+positive. A deferral's `deferUntil` is a UTC instant or null. Outcome POST
+bodies contain `result` (`success`, `rate_limited`, `access_blocked`, `http_error`, `unknown`
 or `not_sent`), optionally `status`, `errorCode` and `retryAfterMs`; error codes
 come from the connector contract. Retry delays are nonnegative safe integers;
 an invalid delay is omitted without suppressing a recognized block. A successful
@@ -331,6 +333,9 @@ their raised order, then `source_hidden_or_unavailable` when hidden, then
 shapes. New platform codes are documented by that platform and retain meaning.
 
 ## Provider setup and session reuse
+
+The optional `createSessionStore` API requires version 1.1.0 or later; version
+1.1.0 is unreleased. It supports anonymous, process-local reuse only.
 
 Minimize actual upstream requests. Reuse successful setup, bootstrap and
 authentication while their scope and validity still apply. Scope sessions to

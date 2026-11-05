@@ -18,6 +18,9 @@ This list is generated from the platform entrypoints and their READMEs. Run
 
 ## Quick start
 
+The optional HTTP admission and process-local anonymous session APIs require
+version 1.1.0 or later. Version 1.1.0 is unreleased.
+
 Use Node 24 or later:
 
 ```sh
