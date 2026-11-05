@@ -3,6 +3,9 @@ export interface CliIO {
   stdout(message: string): void;
   stderr(message: string): void;
   fetch?: typeof fetch;
+  admissionFetch?: typeof fetch;
+  env?: Readonly<Record<string, string | undefined>>;
+  signal?: AbortSignal;
   now?: () => Date;
   onServe?: (url: string, close: () => Promise<void>) => Promise<void>;
   checkRepository?: (cwd: string) => void;

@@ -147,6 +147,48 @@ runtime parses `Retry-After` for 429 responses; it does not forward that header
 for other error statuses. Scheduled production collection supplies its own gate
 and retains its existing cadence.
 
+`createHttpAdmissionGate({ reserveUrl, outcomeUrlTemplate, sourceOrigin, bearer,
+localGate, serviceFetch?, signal? })` optionally combines a local gate with a
+shared HTTP admission service. Reuse the local gate for concurrent requests
+to that site; the service coordinates the shared budget. The reserve and
+outcome URLs must have the same HTTPS origin
+(HTTP loopback is supported for testing); configure exactly one source origin.
+The outcome URL template contains one `{reservationId}` path segment. The
+service receives a request purpose when reserving, and a bounded result and
+observed status when recording an outcome. The bearer is sent only in the
+service's authorization header. A deferral, malformed or lost service reply,
+failed outcome report, or mismatched source fails closed. There is no service
+retry or provider retry. Unknown and proven pre-fetch outcomes are never
+reported as successful; they do not imply that a reservation was refunded.
+
+The reserve POST body is `{ "purpose": "calendar" }`, using a contract request
+purpose. A successful reserve reply is either
+`{ result: "reserved", reservationId, allowanceOwner, budgetDate, used, cap, warningCrossed }`
+or `{ result: "deferred", deferUntil, operatorHold }`. IDs are UUIDs, the
+budget date is a UTC date, counts are nonnegative safe integers, and the cap is
+positive. A
+deferral's `deferUntil` is a UTC instant or null. Outcome POST bodies contain
+`result` (`success`, `rate_limited`, `access_blocked`, `http_error`, `unknown`
+or `not_sent`), optionally `status`, `errorCode` and `retryAfterMs`; error codes
+come from the connector contract. Retry delays are nonnegative safe integers;
+an invalid delay is omitted without suppressing a recognized block. A successful
+reply is `{ "recorded": true }`;
+an unauthorized or conflicting reply fails closed. The result is authoritative:
+an observed challenge remains `access_blocked` even when its status is 5xx.
+`unknown` and `not_sent` carry no status. The service receives neither a source
+URL nor provider credentials.
+
+This gate requires a runtime with ticket-bound dispatch support. On admission,
+the runtime passes the gate's exact `dispatch` function as the optional second
+`acquire` argument. The gate refuses admission without that capability. A
+dispatch hook must synchronously call the supplied `send` once and return that
+same promise. The runtime alone enters the actual fetch, marks that entry,
+rechecks its deadline and cookie proof, and rejects a substituted result or a
+late or repeated send. Ordinary gates without `dispatch` keep the existing
+one-argument acquire and fetch behavior. A controller must verify this runtime
+capability before enabling the HTTP gate; installing a gate beside an older
+runtime does not enable guarded dispatch.
+
 `leaseScope: "per_read"` releases after the whole read or identity check,
 including parsing, and reports its final outcome. `"per_request"` releases
 after each response is classified, including a platform's payload-level

@@ -157,8 +157,17 @@ export interface GateOutcome {
   retryable?: boolean;
 }
 export interface Gate {
-  acquire(request: GateRequest): Promise<GateTicket>;
+  acquire(
+    request: GateRequest,
+    dispatch?: Gate["dispatch"],
+  ): Promise<GateTicket>;
   release(ticket: GateTicket, outcome: GateOutcome): Promise<void>;
+  /** Optionally bind an admitted ticket to the runtime's single fetch entry. */
+  dispatch?(
+    ticket: GateTicket,
+    request: GateRequest,
+    send: (markStarted: () => void) => Promise<Response>,
+  ): Promise<Response>;
 }
 
 export interface HttpRequest {

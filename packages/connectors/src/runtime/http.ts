@@ -8,6 +8,7 @@ import type {
   ConnectorErrorCode,
   Gate,
   GateOutcome,
+  GateRequest,
   GateTicket,
   HttpClient,
   HttpRequest,
@@ -134,6 +135,8 @@ export function createConnectorRuntime(
     !["per_read", "per_request"].includes(options.leaseScope) ||
     typeof options.gate?.acquire !== "function" ||
     typeof options.gate?.release !== "function" ||
+    (options.gate?.dispatch !== undefined &&
+      typeof options.gate.dispatch !== "function") ||
     typeof options.fetch !== "function" ||
     typeof options.now !== "function" ||
     (options.monotonicNow !== undefined &&
@@ -144,6 +147,38 @@ export function createConnectorRuntime(
   const scopes = new AsyncLocalStorage<ReadScope>();
   const monotonicNow = options.monotonicNow ?? (() => performance.now());
   const cookieProofs: CookieProof[] = [];
+  function assertCookie(request: HttpRequest): void {
+    const cookie = Object.entries(request.headers ?? {}).find(
+      ([name]) => name.toLowerCase() === "cookie",
+    )?.[1];
+    if (cookie === undefined) return;
+    const jar = options.profile.cookieJar;
+    const issued =
+      jar &&
+      cookieProofs.some((proof) => {
+        try {
+          return (
+            parseCookieJar(
+              proof.headers,
+              proof.url,
+              proof.endpointPath,
+              proof.receivedAt,
+              { cookieDomains: jar.cookieDomains },
+            ).header === cookie &&
+            parseCookieJar(
+              proof.headers,
+              proof.url,
+              request.url.pathname,
+              proof.receivedAt,
+              { cookieDomains: jar.cookieDomains },
+            ).header === cookie
+          );
+        } catch {
+          return false;
+        }
+      });
+    if (!issued) throw new ConnectorError("schema_changed");
+  }
   async function releaseRequest(ticket: GateTicket, outcome: GateOutcome) {
     try {
       await options.gate.release(ticket, outcome);
@@ -154,37 +189,7 @@ export function createConnectorRuntime(
   const http: HttpClient = {
     async request(input: HttpRequest) {
       const request = snapshotRequest(input, options.tenant, options.profile);
-      const cookie = Object.entries(request.headers ?? {}).find(
-        ([name]) => name.toLowerCase() === "cookie",
-      )?.[1];
-      if (cookie !== undefined) {
-        const jar = options.profile.cookieJar;
-        const issued =
-          jar &&
-          cookieProofs.some((proof) => {
-            try {
-              return (
-                parseCookieJar(
-                  proof.headers,
-                  proof.url,
-                  proof.endpointPath,
-                  proof.receivedAt,
-                  { cookieDomains: jar.cookieDomains },
-                ).header === cookie &&
-                parseCookieJar(
-                  proof.headers,
-                  proof.url,
-                  request.url.pathname,
-                  proof.receivedAt,
-                  { cookieDomains: jar.cookieDomains },
-                ).header === cookie
-              );
-            } catch {
-              return false;
-            }
-          });
-        if (!issued) throw new ConnectorError("schema_changed");
-      }
+      assertCookie(request);
       const scope =
         options.leaseScope === "per_read" ? scopes.getStore() : undefined;
       if (options.leaseScope === "per_read" && !scope)
@@ -209,12 +214,16 @@ export function createConnectorRuntime(
   };
 
   async function performRequest(request: HttpRequest, scope?: ReadScope) {
-    const ticket = await options.gate.acquire({
+    const gateRequest: GateRequest = {
       court: request.court,
       purpose: request.purpose,
       method: request.method,
       url: request.url.href,
-    });
+    };
+    const dispatch = options.gate.dispatch;
+    const ticket = dispatch
+      ? await options.gate.acquire(gateRequest, dispatch)
+      : await options.gate.acquire(gateRequest);
     scope?.tickets.push(ticket);
     const controller = new AbortController();
     const nativeTimeout = options.profile.timeoutSignal === "native";
@@ -271,7 +280,7 @@ export function createConnectorRuntime(
           : request.url;
       let fetching: Promise<Response>;
       try {
-        fetching = options.fetch(url, {
+        const init: RequestInit = {
           method: request.method,
           headers: request.headers,
           ...(request.body === undefined ? {} : { body: request.body }),
@@ -279,7 +288,56 @@ export function createConnectorRuntime(
           redirect: "manual",
           cache: "no-store",
           signal,
-        });
+        };
+        if (!dispatch) fetching = options.fetch(url, init);
+        else {
+          let open = true;
+          let called = false;
+          let violated = false;
+          let actual: Promise<Response> | undefined;
+          const discard = (pending: Promise<Response>) => {
+            void pending
+              .then(
+                (late) => {
+                  if (late instanceof Response)
+                    void late.body?.cancel().catch(() => {});
+                },
+                () => {},
+              )
+              .catch(() => {});
+          };
+          const send = (markStarted: () => void): Promise<Response> => {
+            if (!open || called || typeof markStarted !== "function") {
+              violated = true;
+              throw new ConnectorError("schema_changed");
+            }
+            called = true;
+            deadline();
+            assertCookie(request);
+            const marked: unknown = markStarted();
+            if (marked !== undefined) {
+              if (marked instanceof Promise) void marked.catch(() => {});
+              throw new ConnectorError("schema_changed");
+            }
+            actual = options.fetch(url, init);
+            return actual;
+          };
+          let dispatched: Promise<Response>;
+          try {
+            dispatched = dispatch.call(options.gate, ticket, gateRequest, send);
+          } catch (error) {
+            if (actual) discard(actual);
+            throw error;
+          } finally {
+            open = false;
+          }
+          if (!called || violated || !actual || dispatched !== actual) {
+            if (actual) discard(actual);
+            if (dispatched instanceof Promise) void dispatched.catch(() => {});
+            throw new ConnectorError("schema_changed");
+          }
+          fetching = actual;
+        }
       } catch (error) {
         throw transportFailure(error, signal, options.profile);
       }

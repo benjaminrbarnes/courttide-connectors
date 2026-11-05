@@ -92,6 +92,31 @@ response or transport failure, and 3 for a blocked run. Specify `--base-url`
 with a loopback fixture server to keep development checks offline. Without
 that option the selected read uses the configured provider origin.
 
+## Optional shared admission
+
+The CLI can use an HTTP admission service in addition to its local per-site
+gate. Set all four environment variables together before `read`, `record` or
+`test:live`:
+
+| Variable                             | Value                                                              |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| `CONNECTORS_ADMISSION_RESERVE_URL`   | HTTPS reservation endpoint                                         |
+| `CONNECTORS_ADMISSION_OUTCOME_URL`   | HTTPS outcome URL template with one `{reservationId}` path segment |
+| `CONNECTORS_ADMISSION_SOURCE_ORIGIN` | The single source origin covered by this configuration             |
+| `CONNECTORS_ADMISSION_BEARER`        | Secret bearer for both service endpoints                           |
+
+The two service URLs must share an origin and contain no credentials, query or
+fragment. HTTP loopback endpoints are allowed for offline tests. Supply the
+bearer through your environment or a private environment file, never as a
+command argument. The service receives only the purpose and later a bounded
+outcome, not the source URL, tenant configuration or provider credentials. The CLI
+refuses partial settings, mixed source origins, `--base-url`, deferrals and ambiguous service
+results before any unadmitted fetch. It records a proven pre-fetch exit as
+`not_sent` and an uncertain started request as `unknown`; neither is a healthy
+result or a promise of a refund. A failed outcome report stops the invocation.
+No service or provider request is retried. `test:live` reports an admission
+deferral as inconclusive.
+
 `list` prints registered platform IDs, parser versions and capabilities. It
 does not print tenant configuration.
 

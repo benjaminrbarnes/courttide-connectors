@@ -15,12 +15,14 @@ import type {
   TenantConfig,
 } from "../contract/types.js";
 import { createConnectorRuntime } from "../runtime/http.js";
+import { AdmissionError } from "../runtime/admission-protocol.js";
 import { politeGate } from "../runtime/polite-gate.js";
 import { parseLocalDate } from "../runtime/temporal.js";
 import { loadConfig, validatePlatformConfig } from "./config.js";
 import { getPlatform } from "./registry.js";
 import type { CliIO, ParsedArgs, ReadOptions } from "./types.js";
 import { singleOption } from "./args.js";
+import { prepareAdmission } from "./admission.js";
 
 export interface ReadResult {
   reading: CourtReading;
@@ -35,6 +37,7 @@ export interface ReadExecution {
   gateLog: Record<string, unknown>[];
   captureResponses?: boolean;
   responses: { request: HttpRequest; response: HttpResponse }[];
+  admission?: { gate: Gate; sourceOrigin: string } | null;
 }
 
 const unsafeParam =
@@ -253,13 +256,16 @@ export async function readCourt(
     );
   const end = start.add({ days: days - 1 }).toString();
   const execution = shared ?? createCliGate(capabilities.minimumGapMs);
+  const admission = prepareAdmission(execution, io);
+  if (admission && options.baseUrl) throw new AdmissionError("unavailable");
   const requestLog = execution.requestLog;
   const gateLog = execution.gateLog;
   const runtime = createConnectorRuntime({
     tenant,
     profile: platform.transport,
     leaseScope: capabilities.leaseScope,
-    gate: execution.gate,
+    gate: admission?.gate ?? execution.gate,
+    signal: io.signal,
     fetch: makeFetch(
       io,
       options.baseUrl ? requireLoopbackBaseUrl(options.baseUrl) : undefined,

@@ -5,4 +5,8 @@ export * from "./http.js";
 export * from "./polite-gate.js";
 export * from "./profiles.js";
 export * from "./retry-after.js";
+export { AdmissionError } from "./admission-protocol.js";
+export type { AdmissionErrorCode } from "./admission-protocol.js";
+export { createHttpAdmissionGate } from "./http-admission.js";
+export type { HttpAdmissionOptions } from "./http-admission.js";
 export * from "./temporal.js";
