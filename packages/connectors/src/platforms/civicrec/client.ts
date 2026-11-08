@@ -1,5 +1,8 @@
 import { Temporal } from "@js-temporal/polyfill";
-import { ConnectorError } from "../../contract/errors.js";
+import {
+  ConnectorError,
+  type ConnectorRejectionReason,
+} from "../../contract/errors.js";
 import type {
   HttpClient,
   HttpResponse,
@@ -16,10 +19,10 @@ import {
 import { parseCivicrecHours } from "./hours.js";
 import type { CivicRecConfig, SelectedCourt } from "./config.js";
 
-function invalid(): never {
-  throw new ConnectorError("schema_changed");
+function invalid(reason?: ConnectorRejectionReason): never {
+  throw new ConnectorError("schema_changed", false, null, reason);
 }
-function checked(response: HttpResponse) {
+function checked(response: HttpResponse, bootstrap = false) {
   if (
     !response ||
     response.status !== 200 ||
@@ -32,18 +35,19 @@ function checked(response: HttpResponse) {
     response.receivedAt.length > 80 ||
     new TextEncoder().encode(response.text).byteLength > 1024 * 1024
   )
-    return invalid();
+    return invalid(bootstrap ? "bootstrap_response_invalid" : undefined);
   try {
     const requested = Temporal.Instant.from(response.requestedAt);
     const received = Temporal.Instant.from(response.receivedAt);
-    if (Temporal.Instant.compare(requested, received) > 0) return invalid();
+    if (Temporal.Instant.compare(requested, received) > 0)
+      return invalid(bootstrap ? "bootstrap_chronology" : undefined);
     return {
       ...response,
       requestedAt: requested.toString(),
       receivedAt: received.toString(),
     };
   } catch {
-    return invalid();
+    return invalid(bootstrap ? "bootstrap_chronology" : undefined);
   }
 }
 function object(value: unknown): value is Record<string, unknown> {
@@ -78,13 +82,20 @@ export class CivicRecReader {
         headers: { accept: "text/html" },
         expect: "html",
       }),
+      true,
     );
     const type = response.headers
       .get("content-type")
       ?.split(";")[0]
       ?.trim()
       .toLowerCase();
-    if (type !== "text/html") throw new ConnectorError("access_blocked");
+    if (type !== "text/html")
+      throw new ConnectorError(
+        "access_blocked",
+        false,
+        null,
+        "bootstrap_content_type",
+      );
     return parseAnonymousBootstrap({
       html: response.text,
       headers: response.headers,

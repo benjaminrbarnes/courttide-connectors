@@ -93,6 +93,61 @@ maximum occupied duration.
 `retryAfterMs`. Codes are `auth_required`, `http_error`, `rate_limited`,
 `access_blocked`, `schema_changed`, `identity_mismatch`,
 `date_coverage_incomplete`, `invalid_interval` and `unsupported_time`.
+Version 1.1.1 adds optional readonly `rejectionReason`, a bounded diagnostic
+identifier separate from the code and day reason codes. The constructor is
+`new ConnectorError(code, retryable = false, retryAfterMs = null, rejectionReason?)`.
+It preserves the existing message, code and retry semantics, and drops an
+unrecognized diagnostic at runtime. The package exports the frozen
+`CONNECTOR_REJECTION_REASONS` allowlist, its `ConnectorRejectionReason` string
+union and `isConnectorRejectionReason(value: unknown)` type guard. Runtime
+error normalization preserves only an allowlisted reason. Callers should use
+that guard before recording reasons from untrusted error-like values.
+
+Reasons identify the first existing failed rule, without response values,
+cookie names, paths, domains, timestamps or source text:
+
+| Reason                         | Existing rejection rule                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------- |
+| `transport_redirect`           | Redirected response or redirect status                                                |
+| `transport_redirect_header`    | Configured redirect header present                                                    |
+| `transport_auth_status`        | HTTP 401 or 403                                                                       |
+| `transport_content_type`       | Missing or disallowed response content type                                           |
+| `transport_challenge`          | Active challenge detected                                                             |
+| `transport_json_html`          | HTML-shaped body where JSON was requested                                             |
+| `transport_application_error`  | CivicRec application error matches the existing session-rejection pattern             |
+| `bootstrap_content_type`       | CivicRec requires HTML after runtime response classification                          |
+| `bootstrap_response_invalid`   | Invalid injected-client bootstrap response envelope                                   |
+| `bootstrap_chronology`         | Invalid or reversed injected-client bootstrap timestamps                              |
+| `bootstrap_context_invalid`    | Invalid bootstrap receipt instant or catalog URL context                              |
+| `bootstrap_attributes_invalid` | Invalid or missing bootstrap attributes, including HTML syntax and attribute entities |
+| `bootstrap_json_invalid`       | Bootstrap attribute is not JSON                                                       |
+| `bootstrap_checkout_invalid`   | Invalid anonymous checkout shape, key or base path                                    |
+| `cookie_received_at`           | Invalid cookie receipt instant                                                        |
+| `cookie_missing`               | No cookie rows                                                                        |
+| `cookie_rows_limit`            | Cookie row limit exceeded                                                             |
+| `cookie_bytes_limit`           | Cookie byte limit exceeded                                                            |
+| `cookie_pair_invalid`          | Invalid name/value pair delimiter                                                     |
+| `cookie_name_invalid`          | Invalid cookie name syntax                                                            |
+| `cookie_value_invalid`         | Invalid cookie value syntax                                                           |
+| `cookie_name_duplicate`        | Conflicting cookie name already in the jar                                            |
+| `cookie_attribute_duplicate`   | Duplicate cookie attribute                                                            |
+| `cookie_secure_attribute`      | Secure attribute has a value                                                          |
+| `cookie_max_age`               | Invalid Max-Age syntax                                                                |
+| `cookie_expires`               | Invalid Expires date                                                                  |
+| `cookie_domain`                | Cookie domain outside the allowlist                                                   |
+| `cookie_path_invalid`          | Invalid cookie path syntax                                                            |
+| `cookie_path_mismatch`         | Cookie path excludes the requested endpoint                                           |
+| `cookie_partitioned`           | Partitioned cookie rejected                                                           |
+| `cookie_secure_prefix`         | Secure-prefix requirements fail                                                       |
+| `cookie_host_prefix`           | Host-prefix requirements fail                                                         |
+| `cookie_none_applicable`       | No unexpired cookie remains                                                           |
+
+These diagnostics do not change admission, classification order, cookie
+acceptance, retry policy or gate outcomes. Other errors may omit a reason;
+absence does not imply a particular failed rule. In particular, unrelated
+HTTP, rate-limit, timeout and shared response-schema failures retain their
+existing codes without added diagnostics.
+
 `GateDeferred` has name `GateDeferred`, an `until` instant and reason `hold`,
 `pacing` or `budget`.
 

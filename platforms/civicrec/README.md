@@ -11,6 +11,18 @@ never appear in a reading. By default, bootstrap is cached per connector,
 including a failure. Keep that connector and runtime within one job's authority
 lifetime; retaining them would also retain the job's gate and signal.
 
+Version 1.1.1 adds allowlisted `ConnectorError.rejectionReason` diagnostics
+for anonymous setup. They distinguish transport redirects, authentication
+statuses, content-type guards, challenges and application errors, followed by
+bootstrap envelope, chronology, attribute, JSON, anonymous checkout and cookie
+validation rules. The shared transport diagnostics also apply to hours reads.
+See the [contract's exact reason list](../../docs/CONTRACT.md#interfaces).
+No response content, cookie value or source configuration is included. Reasons
+identify the first failed rule and preserve its existing code, retry behavior
+and gate outcome. Errors outside these rules may omit the diagnostic; missing
+diagnostics do not identify a cause. Cookie domain, path, partitioning, prefix,
+syntax, limits and expiration rules remain unchanged.
+
 Cross-job session reuse requires version 1.1.0 or later; version 1.1.0 is
 unreleased. The store is anonymous-only and process-local; it does not
 coordinate sessions between processes.

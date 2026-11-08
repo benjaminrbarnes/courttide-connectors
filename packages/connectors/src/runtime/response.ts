@@ -27,14 +27,27 @@ function checkStatus(
   profile: TransportProfile,
   clock: ResponseClock,
 ): void {
-  if (
-    response.redirected ||
-    (response.status >= 300 && response.status < 400) ||
-    profile.redirectHeaders.some((name) => response.headers.has(name)) ||
-    response.status === 401 ||
-    response.status === 403
-  )
-    throw new ConnectorError("access_blocked");
+  if (response.redirected || (response.status >= 300 && response.status < 400))
+    throw new ConnectorError(
+      "access_blocked",
+      false,
+      null,
+      "transport_redirect",
+    );
+  if (profile.redirectHeaders.some((name) => response.headers.has(name)))
+    throw new ConnectorError(
+      "access_blocked",
+      false,
+      null,
+      "transport_redirect_header",
+    );
+  if (response.status === 401 || response.status === 403)
+    throw new ConnectorError(
+      "access_blocked",
+      false,
+      null,
+      "transport_auth_status",
+    );
   if (response.status === 429) {
     const reference =
       profile.retryAfter === "lenient"
@@ -85,7 +98,12 @@ function checkType(
   const allowed =
     expected === "json" ? profile.jsonContentTypes : profile.htmlContentTypes;
   if (!type || !allowed.includes(type))
-    throw new ConnectorError("access_blocked");
+    throw new ConnectorError(
+      "access_blocked",
+      false,
+      null,
+      "transport_content_type",
+    );
 }
 
 export async function processResponse(
@@ -97,7 +115,13 @@ export async function processResponse(
 ): Promise<HttpResponse> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    if (response.redirected) throw new ConnectorError("access_blocked");
+    if (response.redirected)
+      throw new ConnectorError(
+        "access_blocked",
+        false,
+        null,
+        "transport_redirect",
+      );
     const rawType = response.headers.get("content-type")?.toLowerCase() ?? "";
     const classifyJson =
       request.expect === "json" ||
@@ -126,7 +150,12 @@ export async function processResponse(
           (error.code === "http_error" || bare401)
         ) {
           if (await rejectedChallenge(response, profile, clock))
-            throw new ConnectorError("access_blocked");
+            throw new ConnectorError(
+              "access_blocked",
+              false,
+              null,
+              "transport_challenge",
+            );
           if (bare401) throw new ConnectorError("http_error");
         }
         throw error;
@@ -179,7 +208,12 @@ export async function processResponse(
       checkType(response, expected, profile);
     }
     if (request.expect === "json" && /^\s*</.test(text))
-      throw new ConnectorError("access_blocked");
+      throw new ConnectorError(
+        "access_blocked",
+        false,
+        null,
+        "transport_json_html",
+      );
     if (
       (clock.inspectRejectedChallenge ||
         (profile.challenge &&
@@ -188,7 +222,12 @@ export async function processResponse(
             /^\s*</.test(text)))) &&
       detectChallenge(text, profile.challenge ?? {})
     )
-      throw new ConnectorError("access_blocked");
+      throw new ConnectorError(
+        "access_blocked",
+        false,
+        null,
+        "transport_challenge",
+      );
     let body: unknown = text;
     if (classifyJson) {
       try {
