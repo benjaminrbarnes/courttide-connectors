@@ -1,9 +1,14 @@
-import { ConnectorError } from "../contract/errors.js";
+import {
+  ConnectorError,
+  type ConnectorRejectionReason,
+} from "../contract/errors.js";
 import { InstantSchema } from "../contract/schemas.js";
 import { parseCookieJar } from "./cookies.js";
 
-function invalid(): never {
-  throw new ConnectorError("schema_changed");
+function invalid(
+  reason: ConnectorRejectionReason = "bootstrap_attributes_invalid",
+): never {
+  throw new ConnectorError("schema_changed", false, null, reason);
 }
 
 function decodeAttribute(value: string): string {
@@ -143,13 +148,13 @@ export function parseAnonymousBootstrap(options: {
     options.catalogUrl.search ||
     options.catalogUrl.hash
   )
-    return invalid();
+    return invalid("bootstrap_context_invalid");
   const attrs = bootstrapAttributes(options.html);
   let page: unknown;
   try {
     page = JSON.parse(attrs.page);
   } catch {
-    return invalid();
+    return invalid("bootstrap_json_invalid");
   }
   if (
     !page ||
@@ -157,7 +162,7 @@ export function parseAnonymousBootstrap(options: {
     Array.isArray(page) ||
     !("checkoutData" in page)
   )
-    return invalid();
+    return invalid("bootstrap_checkout_invalid");
   const checkout = page.checkoutData;
   if (
     !checkout ||
@@ -170,7 +175,7 @@ export function parseAnonymousBootstrap(options: {
     !/^[\x21-\x7e]{1,1024}$/.test(checkout.key) ||
     attrs.base !== options.catalogUrl.pathname.slice(0, -"catalog".length)
   )
-    return invalid();
+    return invalid("bootstrap_checkout_invalid");
   const jar = parseCookieJar(
     options.headers,
     options.catalogUrl,

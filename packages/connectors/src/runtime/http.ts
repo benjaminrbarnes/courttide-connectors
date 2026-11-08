@@ -1,5 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { ConnectorError } from "../contract/errors.js";
+import {
+  ConnectorError,
+  isConnectorRejectionReason,
+} from "../contract/errors.js";
 import {
   TenantConfigSchema,
   TransportProfileSchema,
@@ -86,10 +89,13 @@ function safeError(error: unknown, retryable: boolean): ConnectorError {
       error.retryAfterMs >= 0
         ? error.retryAfterMs
         : null;
+    const reason =
+      "rejectionReason" in error ? error.rejectionReason : undefined;
     return new ConnectorError(
       error.code as ConnectorErrorCode,
       retryable,
       delay,
+      isConnectorRejectionReason(reason) ? reason : undefined,
     );
   }
   return new ConnectorError("http_error", retryable);

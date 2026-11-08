@@ -220,7 +220,12 @@ export const civicRecLegacyProfile: TransportProfile = {
       typeof body.error === "string" &&
       /expired|denied|unauthorized|forbidden|login required/i.test(body.error)
     )
-      throw new ConnectorError("access_blocked");
+      throw new ConnectorError(
+        "access_blocked",
+        false,
+        null,
+        "transport_application_error",
+      );
   },
 };
 

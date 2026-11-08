@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1
+
+- Add allowlisted rejection diagnostics for CivicRec anonymous setup and cookie
+  validation while preserving rejection rules and retry behavior.
+
 ## 1.1.0
 
 - Add optional HTTP admission to the runtime and CLI, with guarded fetch entry
