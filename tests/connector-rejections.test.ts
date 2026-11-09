@@ -106,7 +106,7 @@ const cookieCases: {
   {
     reason: "cookie_partitioned",
     code: "access_blocked",
-    rows: ["Example=example-token; Path=/; Secure; Partitioned"],
+    rows: ["Example=example-token; Path=/; Partitioned"],
   },
   {
     reason: "cookie_secure_prefix",

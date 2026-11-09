@@ -137,7 +137,7 @@ cookie names, paths, domains, timestamps or source text:
 | `cookie_domain`                | Cookie domain outside the allowlist                                                   |
 | `cookie_path_invalid`          | Invalid cookie path syntax                                                            |
 | `cookie_path_mismatch`         | Cookie path excludes the requested endpoint                                           |
-| `cookie_partitioned`           | Partitioned cookie rejected                                                           |
+| `cookie_partitioned`           | Partitioned cookie without Secure rejected                                            |
 | `cookie_secure_prefix`         | Secure-prefix requirements fail                                                       |
 | `cookie_host_prefix`           | Host-prefix requirements fail                                                         |
 | `cookie_none_applicable`       | No unexpired cookie remains                                                           |
@@ -301,8 +301,8 @@ Existing profiles retain their platform behavior:
   `x-requested-with`; later requests allow those headers and require `accept`.
   When present, `x-requested-with` is exactly `XMLHttpRequest`.
   Header values are printable ASCII, cookies are capped at 16 KiB and other
-  header values at 256 characters. The jar limits domains and paths, rejects
-  `Partitioned`, enforces `__Secure-` and `__Host-` rules, gives Max-Age
+  header values at 256 characters. The jar limits domains and paths, accepts
+  `Partitioned` only with `Secure` (1.1.2), enforces `__Secure-` and `__Host-` rules, gives Max-Age
   precedence over Expires, and accepts one to 16 rows up to 16 KiB.
 - The challenge detector treats a challenge title, challenge form or challenge
   platform path as a block, except the profile's explicitly listed passive

@@ -143,7 +143,7 @@ describe("runtime helpers", () => {
     for (const bad of [
       "ExampleSession=example; Path=/other; Secure",
       "ExampleSession=example; Path=/; Domain=other.invalid; Secure",
-      "ExampleSession=example; Path=/; Secure; Partitioned",
+      "ExampleSession=example; Path=/; Partitioned",
       "__Host-Example=example; Path=/; Domain=example.invalid; Secure",
       "__Secure-Example=example; Path=/",
       "ExampleSession=example; Path=/; Max-Age=0",
@@ -154,6 +154,20 @@ describe("runtime helpers", () => {
         parseCookieJar(blocked, url, endpoint, receivedAt, options),
       ).toThrowError(expect.objectContaining({ code: "access_blocked" }));
     }
+    // A Secure partitioned (CHIPS) cookie from a CDN is an ordinary cookie
+    // for this single-site client and no longer blocks the session.
+    const partitioned = new Headers();
+    partitioned.append("set-cookie", "ExampleSession=example-token; Path=/");
+    partitioned.append(
+      "set-cookie",
+      "__example_bm=example-bot; HttpOnly; SameSite=None; Partitioned; Secure; Path=/; Domain=example.invalid; Max-Age=1800",
+    );
+    expect(
+      parseCookieJar(partitioned, url, endpoint, receivedAt, options),
+    ).toEqual({
+      header: "ExampleSession=example-token; __example_bm=example-bot",
+      values: ["example-token", "example-bot"],
+    });
     const conflicting = new Headers();
     conflicting.append("set-cookie", "ExampleSession=one; Path=/");
     conflicting.append("set-cookie", "ExampleSession=two; Path=/");

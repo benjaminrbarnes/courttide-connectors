@@ -54,6 +54,7 @@ export function parseCookieJarWithExpiry(
     if (jar.has(name)) return fail("schema_changed", "cookie_name_duplicate");
     let path = url.pathname.slice(0, url.pathname.lastIndexOf("/")) || "/";
     let secure = false;
+    let partitioned = false;
     let hostOnly = true;
     let maxAge: number | null = null;
     let expires: number | null = null;
@@ -85,9 +86,13 @@ export function parseCookieJarWithExpiry(
         if (!Number.isFinite(expires))
           return fail("schema_changed", "cookie_expires");
       } else if (key === "partitioned") {
-        return fail("access_blocked", "cookie_partitioned");
+        // CHIPS: a partitioned cookie is an ordinary cookie for a direct,
+        // single-site client. Browsers only accept it with Secure.
+        partitioned = true;
       }
     }
+    if (partitioned && !secure)
+      return fail("access_blocked", "cookie_partitioned");
     if (!pathMatches(path, endpointPath))
       return fail("access_blocked", "cookie_path_mismatch");
     if (name.startsWith("__Secure-") && !secure)
