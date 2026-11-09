@@ -21,7 +21,8 @@ No response content, cookie value or source configuration is included. Reasons
 identify the first failed rule and preserve its existing code, retry behavior
 and gate outcome. Errors outside these rules may omit the diagnostic; missing
 diagnostics do not identify a cause. Cookie domain, path, partitioning, prefix,
-syntax, limits and expiration rules remain unchanged.
+syntax, limits and expiration rules remain unchanged. Version 1.1.2 accepts
+Secure partitioned (CHIPS) cookies, such as CDN bot-management cookies.
 
 Cross-job session reuse requires version 1.1.0 or later; version 1.1.0 is
 unreleased. The store is anonymous-only and process-local; it does not

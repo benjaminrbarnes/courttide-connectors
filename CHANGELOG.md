@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+- Accept Secure partitioned (CHIPS) cookies, such as CDN bot-management
+  cookies, instead of rejecting the session. Partitioned cookies without
+  Secure are still rejected with `cookie_partitioned`.
+
 ## 1.1.1
 
 - Add allowlisted rejection diagnostics for CivicRec anonymous setup and cookie
